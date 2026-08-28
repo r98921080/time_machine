@@ -33,9 +33,11 @@ class _VlogScreenState extends State<VlogScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final vlogs = provider.recentVlogs.where((v) {
+      final dateStr =
+          '${v.date.month.toString().padLeft(2, '0')}/${v.date.day.toString().padLeft(2, '0')}';
       final matchQuery = _searchQuery.isEmpty ||
           v.narrative.contains(_searchQuery) ||
-          DateFormat('MM/dd').format(v.date).contains(_searchQuery);
+          dateStr.contains(_searchQuery);
       final matchTag = _filterTag == null || v.performanceTag == _filterTag;
       return matchQuery && matchTag;
     }).toList();
