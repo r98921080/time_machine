@@ -30,6 +30,7 @@ class ShopItem {
   final ShopCategory category;
   final int price;
   final String description;
+  final String emoji;
   final String? assetPath;
   final String? previewUrl;
   final bool isLimited;
@@ -42,6 +43,7 @@ class ShopItem {
     required this.category,
     required this.price,
     required this.description,
+    this.emoji = '🎁',
     this.assetPath,
     this.previewUrl,
     this.isLimited = false,
@@ -55,6 +57,7 @@ class ShopItem {
     'category': category.name,
     'price': price,
     'description': description,
+    'emoji': emoji,
     'assetPath': assetPath,
     'previewUrl': previewUrl,
     'isLimited': isLimited,
@@ -68,6 +71,7 @@ class ShopItem {
     category: ShopCategory.values.firstWhere((e) => e.name == m['category']),
     price: m['price'] as int,
     description: m['description'] as String,
+    emoji: m['emoji'] as String? ?? '🎁',
     assetPath: m['assetPath'] as String?,
     previewUrl: m['previewUrl'] as String?,
     isLimited: m['isLimited'] as bool? ?? false,
