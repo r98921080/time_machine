@@ -171,6 +171,7 @@ class AppProvider extends ChangeNotifier {
   // ── Chat / Food Analysis ─────────────────────────────────────
 
   Future<String?> analyzeFood(String text) async {
+    if (_gemini == null) return '請先在設定中輸入 Gemini API Key。';
     _sendingMessage = true;
     notifyListeners();
     try {
@@ -184,6 +185,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<String?> analyzeFoodImage(Uint8List bytes, String? note) async {
+    if (_gemini == null) return '請先在設定中輸入 Gemini API Key。';
     _sendingMessage = true;
     notifyListeners();
     try {
@@ -249,10 +251,12 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<String> completeDiary(String content) async {
+    if (_gemini == null) return '（請設定 API Key 後使用 AI 補完功能）';
     return await _gemini!.completeDiary(content, _profile!.nickname);
   }
 
   Future<List<String>> extractTodos(String content) async {
+    if (_gemini == null) return [];
     return await _gemini!.extractTodos(content);
   }
 
@@ -266,6 +270,7 @@ class AppProvider extends ChangeNotifier {
         : ratio > 1.1
             ? '超標'
             : '低落';
+    if (_gemini == null) return;
     final narrative = await _gemini!.generateVlog(
       nickname: _profile!.nickname,
       calories: todayCalories,
@@ -318,9 +323,20 @@ class AppProvider extends ChangeNotifier {
       case 'outfit':
         updated = _character!.copyWith(outfitId: itemId);
       case 'hair':
-        updated = _character!.copyWith(outfitId: _character!.outfitId);
+        // Extract hair style and color from item id, e.g. hair_bob_black
+        final parts = itemId.split('_');
+        final style = parts.length > 1 ? parts[1] : null;
+        final color = parts.length > 2 ? parts[2] : null;
+        updated = _character!.copyWith(
+          hairStyle: style != null ? HairStyle.values.firstWhere(
+            (h) => h.name == style, orElse: () => _character!.hairStyle) : _character!.hairStyle,
+          hairColor: color != null ? HairColor.values.firstWhere(
+            (h) => h.name == color, orElse: () => _character!.hairColor) : _character!.hairColor,
+        );
       case 'acc':
       case 'face':
+      case 'furn':
+      case 'special':
         final current = List<String>.from(_character!.accessories);
         if (!current.contains(itemId)) current.add(itemId);
         updated = _character!.copyWith(accessories: current);
@@ -402,6 +418,7 @@ class AppProvider extends ChangeNotifier {
   // ── Mirror Response ──────────────────────────────────────────
 
   Future<String> getMirrorResponse() async {
+    if (_gemini == null) return '請先設定 Gemini API Key。';
     final target = _profile!.calculatedCalorieTarget;
     final ratio = target > 0 ? todayCalories / target : 0.0;
     return await _gemini!.getMirrorResponse(
@@ -433,7 +450,11 @@ class AppProvider extends ChangeNotifier {
       return;
     } else {
       final diff = today.difference(last).inDays;
-      newStreak = diff <= 2 ? newStreak + 1 : 1;
+      if (diff == 1) {
+        newStreak = newStreak + 1;
+      } else if (diff > 1) {
+        newStreak = 1;
+      }
     }
 
     final updated = _profile!.copyWith(

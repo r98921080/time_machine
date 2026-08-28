@@ -242,6 +242,7 @@ $diaryContent
   "correct": "正確答案（真實有趣的事實）",
   "wrong1": "假答案1（聽起來合理但是假的）",
   "wrong2": "假答案2（聽起來合理但是假的）",
+  "wrong3": "假答案3（聽起來合理但是假的）",
   "explanation": "解釋為什麼正確答案是對的（50字以內）",
   "category": "$category"
 }

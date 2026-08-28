@@ -47,7 +47,8 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
         final correct = parsed['correct'] as String? ?? '';
         final wrong1 = parsed['wrong1'] as String? ?? '';
         final wrong2 = parsed['wrong2'] as String? ?? '';
-        final opts = [correct, wrong1, wrong2]..shuffle();
+        final wrong3 = parsed['wrong3'] as String? ?? '';
+        final opts = [correct, wrong1, wrong2, if (wrong3.isNotEmpty) wrong3]..shuffle();
         setState(() {
           _question = parsed;
           _options = opts;
@@ -223,7 +224,7 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
                         ),
                       ] else ...[
                         Card(
-                          color: Colors.amber.shade100,
+                          color: theme.colorScheme.tertiaryContainer,
                           child: Padding(
                             padding: const EdgeInsets.all(16),
                             child: Column(
@@ -238,7 +239,7 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
                                         style: theme.textTheme.labelMedium
                                             ?.copyWith(
                                                 fontWeight: FontWeight.bold,
-                                                color: Colors.amber.shade900)),
+                                                color: theme.colorScheme.onTertiaryContainer)),
                                   ],
                                 ),
                                 const SizedBox(height: 8),
@@ -246,7 +247,7 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
                                   _question!['explanation'] ?? '',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                       height: 1.6,
-                                      color: Colors.brown.shade800),
+                                      color: theme.colorScheme.onTertiaryContainer),
                                 ),
                               ],
                             ),

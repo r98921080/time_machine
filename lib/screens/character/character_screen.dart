@@ -145,8 +145,14 @@ class _CharacterScreenState extends State<CharacterScreen>
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: isMirror
-                      ? [const Color(0xFFFFE0F0), const Color(0xFFFFF0F8)]
-                      : [const Color(0xFFE8E8FF), const Color(0xFFF0F0FF)],
+                      ? [
+                          theme.colorScheme.secondaryContainer,
+                          theme.colorScheme.surface,
+                        ]
+                      : [
+                          theme.colorScheme.primaryContainer,
+                          theme.colorScheme.surface,
+                        ],
                 ),
               ),
               child: Stack(
@@ -371,10 +377,10 @@ class _CharacterStats extends StatelessWidget {
             Text('體態進度', style: theme.textTheme.titleSmall),
             const SizedBox(height: 12),
             _ProgressRow('肌肉線條', character.muscleLevel,
-                const Color(0xFF3B82F6), theme),
+                theme.colorScheme.primary, theme),
             const SizedBox(height: 8),
             _ProgressRow('體脂控制', 1 - character.fatLevel,
-                const Color(0xFF10B981), theme),
+                theme.colorScheme.tertiary, theme),
           ],
         ),
       ),

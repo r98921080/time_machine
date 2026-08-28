@@ -4,6 +4,7 @@ import '../../providers/app_provider.dart';
 import '../../models/diary_entry.dart';
 import '../knowledge/knowledge_screen.dart';
 import '../diary/diary_screen.dart';
+import '../shop/shop_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -68,6 +69,9 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 // Daily Knowledge Card
                 _KnowledgeTeaser(theme: theme),
+                const SizedBox(height: 12),
+                // Shop Teaser
+                _ShopTeaser(points: profile.growthPoints, theme: theme),
                 const SizedBox(height: 12),
                 // Today Vlog / Diary
                 _TodaySummaryCard(provider: provider, theme: theme),
@@ -217,6 +221,49 @@ class _KnowledgeTeaser extends StatelessWidget {
               ),
               Icon(Icons.chevron_right,
                   color: theme.colorScheme.onSecondaryContainer),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ShopTeaser extends StatelessWidget {
+  final int points;
+  final ThemeData theme;
+  const _ShopTeaser({required this.points, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const ShopScreen())),
+      child: Card(
+        color: theme.colorScheme.tertiaryContainer,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              const Text('🛍️', style: TextStyle(fontSize: 24)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('成長商店',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onTertiaryContainer)),
+                    Text('你有 $points 點可以使用',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onTertiaryContainer
+                                .withOpacity(0.75))),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right,
+                  color: theme.colorScheme.onTertiaryContainer),
             ],
           ),
         ),

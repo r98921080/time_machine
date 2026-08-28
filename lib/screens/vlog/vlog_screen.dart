@@ -49,7 +49,7 @@ class _VlogScreenState extends State<VlogScreen> {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      null, '卓越', '普通', '超標', '低落'
+                      null, '卓越', '超標', '低落'
                     ].map((tag) => Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: FilterChip(
@@ -71,15 +71,15 @@ class _VlogScreenState extends State<VlogScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.video_collection_outlined,
-                      size: 64, color: Colors.grey),
+                  Icon(Icons.video_collection_outlined,
+                      size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   const SizedBox(height: 16),
                   const Text('還沒有 Vlog',
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  const Text('完成今日記錄後，可以生成你的第一個 Vlog',
+                  Text('完成今日記錄後，可以生成你的第一個 Vlog',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey)),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 24),
                   FilledButton.icon(
                     onPressed: () async {

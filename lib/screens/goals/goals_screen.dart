@@ -592,7 +592,7 @@ class _LevelBadge extends StatelessWidget {
                 style: TextStyle(color: color, fontWeight: FontWeight.bold)),
             TextSpan(
                 text: target,
-                style: TextStyle(color: Colors.grey.shade700)),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
         ),
       ),
@@ -610,14 +610,14 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.track_changes_outlined,
-              size: 64, color: Colors.grey),
+          Icon(Icons.track_changes_outlined,
+              size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(height: 16),
           const Text('還沒有目標',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          const Text('建立你的第一個生活目標類別',
-              style: TextStyle(color: Colors.grey)),
+          Text('建立你的第一個生活目標類別',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 24),
           FilledButton.icon(
             onPressed: onAdd,
