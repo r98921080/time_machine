@@ -25,6 +25,21 @@ jobs:
       - name: Generate platform files
         run: flutter create --no-overwrite --org com.timemachine --project-name time_machine .
 
+      - name: Write google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+
+      - name: Patch android/build.gradle for Firebase
+        run: |
+          grep -q 'google-services' android/build.gradle || \
+            sed -i '/classpath .com.android.tools.build/a\        classpath '"'"'com.google.gms:google-services:4.4.2'"'"'' android/build.gradle
+
+      - name: Patch android/app/build.gradle for Firebase
+        run: |
+          grep -q 'com.google.gms.google-services' android/app/build.gradle || \
+            echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
+
       - name: Write AndroidManifest
         run: |
           cat > android/app/src/main/AndroidManifest.xml << 'EOF'
@@ -59,17 +74,6 @@ jobs:
             </application>
           </manifest>
           EOF
-
-      - name: Patch android/build.gradle for Firebase
-        run: |
-          sed -i 's/classpath .com.android.tools.build:gradle:[^'"'"'"]*/&'"'"'\n        classpath '"'"'com.google.gms:google-services:4.4.2'"'"'/' android/build.gradle || true
-          grep -q 'google-services' android/build.gradle || \
-            sed -i '/classpath .com.android.tools.build/a\        classpath '"'"'com.google.gms:google-services:4.4.2'"'"'' android/build.gradle
-
-      - name: Patch android/app/build.gradle for Firebase
-        run: |
-          grep -q 'com.google.gms.google-services' android/app/build.gradle || \
-            echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
 
       - name: Get dependencies
         run: flutter pub get
