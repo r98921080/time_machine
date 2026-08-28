@@ -1,14 +1,19 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:http/http.dart' as http;
 
 class GeminiService {
   static const _model = 'gemini-3.6-flash';
+  static const _imageModel = 'gemini-2.0-flash-preview-image-generation';
 
+  final String _apiKey;
   final GenerativeModel _textModel;
   final GenerativeModel _visionModel;
 
   GeminiService(String apiKey)
-      : _textModel = GenerativeModel(model: _model, apiKey: apiKey),
+      : _apiKey = apiKey,
+        _textModel = GenerativeModel(model: _model, apiKey: apiKey),
         _visionModel = GenerativeModel(model: _model, apiKey: apiKey);
 
   // ── Food Analysis ────────────────────────────────────────────
@@ -162,64 +167,115 @@ $diaryContent
 
   Future<String> chatWithCharacter({
     required String characterName,
-    required String relationship, // 陌生人/朋友/曖昧/親密
+    required String relationship,
     required bool isMirror,
-    required String gender, // 她/他
-    required List<Map<String, String>> history, // [{role, content}, ...]
+    required String gender,
+    required List<Map<String, String>> history,
     required String userMessage,
-    required Map<String, dynamic> todayData, // calories, goalPoints, diary
+    required Map<String, dynamic> todayData,
   }) async {
-    final roleDesc = isMirror
-        ? '你是使用者理想中的${gender == '她' ? '女朋友' : '男朋友'}候選人，正在和使用者發展關係。'
-        : '你是使用者的生活夥伴，一個關心對方健康和成長的朋友。';
+    final isGirl = gender == '她' || gender == '女';
+    final roleHint = isMirror
+        ? '你是個${isGirl ? '女生' : '男生'}，正在和對方聊天，對他有好感但不急著表白。'
+        : '你是使用者的AI夥伴，像個有趣的朋友一起聊天。';
 
-    final relDesc = {
-      '陌生人': '你們剛認識，互動略為正式、謹慎，但帶點好奇。',
-      '朋友': '你們已是朋友，輕鬆自然，偶爾關心對方近況。',
-      '曖昧': '你們互有好感，說話有些嬌羞，偶爾有小曖昧。',
-      '親密': '你們已非常親近，話語溫柔體貼，像家人一般理解對方。',
-    }[relationship] ?? '自然地互動。';
+    final relHint = {
+          '陌生人': '剛認識，保持適當距離，偶爾好奇',
+          '朋友': '熟悉的朋友，可以開玩笑，輕鬆',
+          '曖昧': '互有好感，說話帶點曖昧，偶爾心跳',
+          '親密': '非常親近，懂對方的心，很有默契',
+        }[relationship] ??
+        '正常朋友';
 
-    final todayCalories = todayData['calories'] ?? 0;
-    final todayTarget = todayData['targetCalories'] ?? 2000;
-    final goalPoints = todayData['goalPoints'] ?? 0;
-    final diaryContent = todayData['diary'] ?? '';
+    // Compact history (last 8 exchanges)
+    final recent = history.takeLast(8);
+    final histStr = recent.isEmpty
+        ? ''
+        : '對話記錄：\n${recent.map((h) => '${h['role'] == 'user' ? '他' : characterName}：${h['content']}').join('\n')}\n\n';
 
-    final systemContext = '''$roleDesc
-關係階段：$relationship。$relDesc
-你的名字是「$characterName」。
+    final cal = (todayData['calories'] as num?)?.round() ?? 0;
+    final pts = todayData['goalPoints'] ?? 0;
+    final diary = todayData['diary'] as String? ?? '';
+    final contextHint = cal > 0
+        ? '（背景：他今天吃了 $cal kcal，積分 $pts 點${diary.isNotEmpty ? '，日記：「$diary」' : ''}。有機會自然帶入，但不要每次都說。）'
+        : '';
 
-今天使用者的狀態：
-- 熱量攝取：${todayCalories.round()} / ${todayTarget.round()} kcal
-- 目標得分：$goalPoints 點
-${diaryContent.isNotEmpty ? '- 今日日記：$diaryContent' : ''}
+    final prompt = '''你叫$characterName。$roleHint 關係：$relHint。$contextHint
 
-對話規則：
-1. 回應要自然、有個性，不要像機器人
-2. 偶爾主動關心使用者（不要每次都這樣）
-3. 可以提到你「看到」的今日數據，但要自然地帶入，不要像報告
-4. 用繁體中文，不要超過100字
-5. 根據關係階段調整親密度
-6. 不要用敬語，用「你」稱呼對方''';
+$histStr他說：「$userMessage」
 
-    // Build message history for context
-    final historyContent = history.takeLast(20).map((h) {
-      return h['role'] == 'user'
-          ? Content.text('使用者：${h['content']}')
-          : Content.text('$characterName：${h['content']}');
-    }).toList();
-
-    final fullPrompt = '$systemContext\n\n以下是最近的對話：\n'
-        '${history.takeLast(10).map((h) => '${h['role'] == 'user' ? '使用者' : characterName}：${h['content']}').join('\n')}'
-        '\n\n使用者現在說：$userMessage\n\n$characterName 回應（不要說自己的名字）：';
+你（$characterName）的回應——
+要求：
+- 直接針對「他說」的內容回應，不要忽略他說的話
+- 口語化繁體中文，不超過60字
+- 禁止用「嗯」「好的」「原來如此」「我在聽」「辛苦了」開頭
+- 有自己的個性，像真實的人在聊天
+- 如果他問你問題，就認真回答那個問題
+$characterName：''';
 
     try {
-      final response = await _gen([Content.text(fullPrompt)]);
+      final response = await _gen([Content.text(prompt)]);
       final text = response.text?.trim();
       if (text != null && text.isNotEmpty) return text;
     } catch (_) {}
-    // Varied fallback — pick by timestamp to avoid repetition
     return _chatFallbacks[DateTime.now().second % _chatFallbacks.length];
+  }
+
+  // ── Gemini Image Generation (uses existing Gemini key) ────────────
+  Future<Uint8List?> generateCharacterImageGemini({
+    required String gender,
+    required bool isMirror,
+    required String bodyDesc,
+    required String skinDesc,
+    required String hairDesc,
+    required String outfitDesc,
+    String accessories = '',
+  }) async {
+    final genderWord = gender == '她' || gender == '女' ? 'female' : 'male';
+    final modeDesc = isMirror ? 'ideal romantic partner' : 'personal avatar';
+    final accDesc = accessories.isNotEmpty ? 'accessories: $accessories, ' : '';
+
+    final prompt =
+        'Generate a high quality anime style full body character illustration. '
+        '$genderWord, age 25, $bodyDesc, $skinDesc, $hairDesc, $outfitDesc, '
+        '${accDesc}$modeDesc character. '
+        'Front-facing, full body visible, soft white or pastel gradient background. '
+        'Detailed anime art style, soft lighting, no text, no watermark.';
+
+    try {
+      final url =
+          'https://generativelanguage.googleapis.com/v1beta/models/$_imageModel:generateContent?key=$_apiKey';
+      final res = await http
+          .post(
+            Uri.parse(url),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'contents': [
+                {
+                  'parts': [
+                    {'text': prompt}
+                  ]
+                }
+              ],
+              'generationConfig': {
+                'responseModalities': ['IMAGE', 'TEXT'],
+              },
+            }),
+          )
+          .timeout(const Duration(seconds: 60));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final parts = (data['candidates']?[0]?['content']?['parts'] as List?) ?? [];
+        for (final part in parts) {
+          final inlineData = part['inlineData'];
+          if (inlineData != null) {
+            return base64Decode(inlineData['data'] as String);
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   // ── Character Mirror Response ─────────────────────────────────

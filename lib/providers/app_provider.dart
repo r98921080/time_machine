@@ -332,6 +332,78 @@ class AppProvider extends ChangeNotifier {
     return await _gemini!.extractTodos(content);
   }
 
+  // ── Character Image (Gemini, no extra key needed) ───────────
+  Future<Uint8List?> generateCharacterImageWithGemini() async {
+    final gemini = _gemini;
+    if (gemini == null || _profile == null) return null;
+    final character = _character;
+    final isMirror = _profile!.characterMode == CharacterMode.mirror;
+    final gender = isMirror ? (_profile!.mirrorGender ?? '她') : _profile!.sex;
+
+    final skinDesc = switch (character?.skinTone) {
+      SkinTone.light => 'fair pale skin',
+      SkinTone.medium => 'medium skin tone',
+      SkinTone.tan => 'warm tan skin',
+      SkinTone.dark => 'dark skin tone',
+      null => 'medium skin tone',
+    };
+    final hairDesc = [
+      switch (character?.hairStyle) {
+        HairStyle.short => 'short hair',
+        HairStyle.medium => 'medium-length hair',
+        HairStyle.long => 'long flowing hair',
+        HairStyle.bun => 'hair in a bun',
+        HairStyle.ponytail => 'ponytail',
+        HairStyle.curly => 'curly wavy hair',
+        null => 'medium hair',
+      },
+      switch (character?.hairColor) {
+        HairColor.black => 'black',
+        HairColor.brown => 'dark brown',
+        HairColor.blonde => 'golden blonde',
+        HairColor.red => 'auburn red',
+        HairColor.gray => 'silver gray',
+        HairColor.fantasy => 'vibrant purple-blue gradient',
+        null => 'black',
+      },
+    ].join(' ');
+    final muscleLevel = character?.muscleLevel ?? 0.5;
+    final fatLevel = character?.fatLevel ?? 0.5;
+    final bodyDesc = muscleLevel > 0.6 && fatLevel < 0.35
+        ? 'athletic toned body'
+        : fatLevel > 0.6
+            ? 'soft chubby cute body'
+            : 'slender healthy body';
+    final outfitDesc = character?.outfitId != null
+        ? _outfitName(character!.outfitId!)
+        : 'modern casual outfit';
+    final accDesc = character?.accessories.take(2).join(', ') ?? '';
+
+    return gemini.generateCharacterImageGemini(
+      gender: gender,
+      isMirror: isMirror,
+      bodyDesc: bodyDesc,
+      skinDesc: skinDesc,
+      hairDesc: hairDesc,
+      outfitDesc: outfitDesc,
+      accessories: accDesc,
+    );
+  }
+
+  String _outfitName(String id) {
+    const map = {
+      'school_uniform': 'Japanese school uniform',
+      'casual_tshirt': 'casual t-shirt and jeans',
+      'sporty': 'athletic sportswear',
+      'formal': 'elegant formal dress',
+      'traditional': 'traditional Asian hanfu',
+      'hoodie': 'cozy hoodie',
+      'dress': 'cute summer dress',
+      'suit': 'sharp suit',
+    };
+    return map[id] ?? 'stylish casual outfit';
+  }
+
   // ── Vlog ─────────────────────────────────────────────────────
 
   Future<bool> generateTodayVlog() async {

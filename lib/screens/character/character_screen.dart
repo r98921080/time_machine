@@ -56,29 +56,43 @@ class _CharacterScreenState extends State<CharacterScreen>
   }
 
   Future<void> _generateImage(AppProvider provider) async {
-    final openAI = provider.openAI;
-    if (openAI == null) {
-      _showKeyDialog(provider);
-      return;
-    }
     setState(() => _generatingImage = true);
     try {
-      final profile = provider.profile!;
-      final character = provider.character!;
-      final isMirror = profile.characterMode == CharacterMode.mirror;
-      final bytes = await openAI.generateCharacterImage(
-        gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
-        bodyGoal: profile.goal.name,
-        isMirror: isMirror,
-        style: 'anime',
-        appearance: character,
-        muscleLevel: character.muscleLevel,
-        fatLevel: character.fatLevel,
-      );
+      Uint8List? bytes;
+
+      // Try Gemini image generation first (uses existing Gemini key)
+      bytes = await provider.generateCharacterImageWithGemini();
+
+      // Fall back to OpenAI DALL-E if Gemini failed and user has key
+      if (bytes == null) {
+        final openAI = provider.openAI;
+        if (openAI != null) {
+          final profile = provider.profile!;
+          final character = provider.character!;
+          final isMirror = profile.characterMode == CharacterMode.mirror;
+          bytes = await openAI.generateCharacterImage(
+            gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
+            bodyGoal: profile.goal.name,
+            isMirror: isMirror,
+            style: 'anime',
+            appearance: character,
+            muscleLevel: character.muscleLevel,
+            fatLevel: character.fatLevel,
+          );
+        }
+      }
+
       if (bytes != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_imageCacheKey, base64Encode(bytes));
         if (mounted) setState(() => _characterImage = bytes);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ 圖片生成失敗，請稍後再試（Gemini 圖片功能需要支援的 API 配額）'),
+            duration: Duration(seconds: 4),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _generatingImage = false);
