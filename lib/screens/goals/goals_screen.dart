@@ -631,33 +631,42 @@ class _SubItemTileState extends State<_SubItemTile> {
 
   Future<void> _rebuildTargets() async {
     setState(() => _rebuilding = true);
+    List<Map<String, dynamic>> options = [];
     try {
-      final catTitle = widget.category.title
-          .replaceAll(RegExp(r'[^一-鿿㐀-䶿\w\s]'), '')
-          .trim();
-      final targets = await widget.provider.generateGoalTargets(catTitle, widget.item.name);
-      if (targets == null || !mounted) return;
-      final updated = GoalCategory(
-        id: widget.category.id,
-        title: widget.category.title,
-        subItems: widget.category.subItems.map((s) {
-          if (s.id != widget.item.id) return s;
-          return GoalSubItem(
-            id: s.id,
-            name: s.name,
-            miniTarget: targets['mini']?.first ?? s.miniTarget,
-            advancedTarget: targets['advanced']?.first ?? s.advancedTarget,
-            eliteTarget: targets['elite']?.first ?? s.eliteTarget,
-          );
-        }).toList(),
-      );
-      await widget.provider.updateCategory(updated);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✨ AI 已重新建構目標')));
-      }
+      options = await widget.provider.generateGoalRebuildOptions(
+          widget.category, widget.item);
     } finally {
       if (mounted) setState(() => _rebuilding = false);
+    }
+    if (!mounted || options.isEmpty) return;
+
+    final selected = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _RebuildOptionsSheet(options: options, theme: widget.theme),
+    );
+    if (selected == null || !mounted) return;
+
+    final updated = GoalCategory(
+      id: widget.category.id,
+      title: widget.category.title,
+      subItems: widget.category.subItems.map((s) {
+        if (s.id != widget.item.id) return s;
+        return GoalSubItem(
+          id: s.id,
+          name: s.name,
+          miniTarget: selected['mini'] as String? ?? s.miniTarget,
+          advancedTarget: selected['advanced'] as String? ?? s.advancedTarget,
+          eliteTarget: selected['elite'] as String? ?? s.eliteTarget,
+        );
+      }).toList(),
+    );
+    await widget.provider.updateCategory(updated);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('✨ 已套用「${selected['name']}」方案')));
     }
   }
 
@@ -875,6 +884,115 @@ class _EmptyState extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RebuildOptionsSheet extends StatelessWidget {
+  final List<Map<String, dynamic>> options;
+  final ThemeData theme;
+  const _RebuildOptionsSheet({required this.options, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.85,
+      builder: (_, ctrl) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: ListView(
+          controller: ctrl,
+          children: [
+            Center(
+              child: Container(width: 40, height: 4,
+                  decoration: BoxDecoration(
+                      color: theme.colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2))),
+            ),
+            const SizedBox(height: 16),
+            Text('✨ 選擇目標重建方案',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text('AI 依據日記及歷史達成率為你量身推薦',
+                style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 16),
+            ...options.map((opt) {
+              final name = opt['name'] as String? ?? '';
+              final desc = opt['description'] as String? ?? '';
+              final mini = opt['mini'] as String? ?? '';
+              final adv = opt['advanced'] as String? ?? '';
+              final elite = opt['elite'] as String? ?? '';
+              final color = name.contains('激進')
+                  ? Colors.orange
+                  : name.contains('輕量')
+                      ? Colors.green
+                      : theme.colorScheme.primary;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => Navigator.pop(context, opt),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                                color: color.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(20)),
+                            child: Text(name,
+                                style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+                          ),
+                          const Spacer(),
+                          Icon(Icons.arrow_forward_ios, size: 14,
+                              color: theme.colorScheme.onSurfaceVariant),
+                        ]),
+                        if (desc.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(desc, style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant)),
+                        ],
+                        const SizedBox(height: 12),
+                        _TargetRow('🌱 入門', mini, theme),
+                        const SizedBox(height: 4),
+                        _TargetRow('⚡ 進階', adv, theme),
+                        const SizedBox(height: 4),
+                        _TargetRow('🔥 精英', elite, theme),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TargetRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final ThemeData theme;
+  const _TargetRow(this.label, this.value, this.theme);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 48,
+            child: Text(label, style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.primary))),
+        Expanded(child: Text(value, style: theme.textTheme.bodySmall)),
+      ],
     );
   }
 }

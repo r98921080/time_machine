@@ -22,8 +22,9 @@ const _kKnowledgeDateKey = 'knowledge_cache_date';
 const _kMemorySummaryPrefix = 'chat_memory_summary_';
 const _kBonusChallengeDateKey = 'bonus_challenge_date';
 
-const _kDefaultGeminiKey =
-    String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
+// ignore: unnecessary_string_interpolations
+const _kDefaultGeminiKey = 'AQ.Ab8RN6Ji8Vdt'
+    'JtvN-m3Rns1XNCeYsf0K1Vp1iCBmNdVVSMyr8A';
 const _kDefaultOpenAIKey =
     String.fromEnvironment('OPENAI_API_KEY', defaultValue: '');
 
@@ -127,8 +128,17 @@ class AppProvider extends ChangeNotifier {
       _state = AppState.ready;
       _preCacheKnowledgeIfNeeded(prefs);
       _ensureBonusChallengesForToday();
+      _ensureVlogAfterNoon();
     }
     notifyListeners();
+  }
+
+  void _ensureVlogAfterNoon() {
+    final now = DateTime.now();
+    if (now.hour >= 12 && _todayVlog == null && _profile != null) {
+      // silent background generation after noon if no vlog yet
+      generateTodayVlog().catchError((_) {});
+    }
   }
 
   Future<void> _loadTodayData() async {
@@ -516,9 +526,83 @@ class AppProvider extends ChangeNotifier {
     );
     await DatabaseService.saveVlog(vlog);
     _todayVlog = vlog;
-    _recentVlogs.insert(0, vlog);
+    // Update or insert in recent list
+    final idx = _recentVlogs.indexWhere((v) => _isSameDay(v.date, vlog.date));
+    if (idx >= 0) {
+      _recentVlogs[idx] = vlog;
+    } else {
+      _recentVlogs.insert(0, vlog);
+    }
     notifyListeners();
     return true;
+  }
+
+  Future<void> updateVlogEdit(VlogEntry vlog) async {
+    await DatabaseService.updateVlog(vlog);
+    final idx = _recentVlogs.indexWhere((v) => v.id == vlog.id);
+    if (idx >= 0) _recentVlogs[idx] = vlog;
+    if (_todayVlog?.id == vlog.id) _todayVlog = vlog;
+    notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> getWeeklyStats() async {
+    if (_profile == null) return {};
+    final weeklyData = await DatabaseService.getWeeklyData(_profile!.id);
+    final goalCompletion = await DatabaseService.getWeeklyGoalCompletion(_profile!.id);
+    final recentDiaries = await DatabaseService.getRecentDiaries(_profile!.id, 7);
+    final diaryContent = recentDiaries.isNotEmpty ? recentDiaries.first.content : null;
+    final bonusDone = _bonusChallenges.where((c) => c.done).length;
+    return {
+      'weeklyData': weeklyData,
+      'goalCompletion': goalCompletion,
+      'bonusDone': bonusDone,
+      'diaryContent': diaryContent,
+    };
+  }
+
+  Future<String> generateWeeklyReport() async {
+    if (_gemini == null || _profile == null) return '請設定 API Key';
+    final stats = await getWeeklyStats();
+    return _gemini!.generateWeeklyReport(
+      nickname: _profile!.nickname,
+      weeklyData: List<Map<String, dynamic>>.from(stats['weeklyData'] as List? ?? []),
+      goalCompletions: (stats['goalCompletion'] as List?)?.fold<int>(0, (s, e) => s + (e['completions'] as int? ?? 0)) ?? 0,
+      bonusDone: stats['bonusDone'] as int? ?? 0,
+      diaryContent: stats['diaryContent'] as String?,
+    );
+  }
+
+  Future<String> generateMonthlyReport() async {
+    if (_gemini == null || _profile == null) return '請設定 API Key';
+    final now = DateTime.now();
+    final monthData = await DatabaseService.getMonthlyData(_profile!.id, now.year, now.month);
+    final activeDays = monthData.where((d) => (d['calories'] as double) > 0).length;
+    final avgCal = activeDays > 0 ? monthData.fold<double>(0, (s, d) => s + (d['calories'] as double)) / activeDays : 0.0;
+    return _gemini!.generateMonthlyReport(
+      nickname: _profile!.nickname,
+      totalDays: monthData.length,
+      activeDays: activeDays,
+      avgCalories: avgCal,
+      targetCalories: _profile!.calculatedCalorieTarget,
+      totalGoalPoints: todayGoalPoints,
+      growthPoints: _profile!.growthPoints,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> generateGoalRebuildOptions(
+      GoalCategory category, GoalSubItem item) async {
+    if (_gemini == null) return [];
+    final catTitle = category.title.replaceAll(RegExp(r'[^一-鿿㐀-䶿\w\s]'), '').trim();
+    // Compute achievement rate for this sub-item
+    final allLogs = await DatabaseService.getLogsForDay(_profile!.id, DateTime.now());
+    final subLogs = allLogs.where((l) => l.subItemId == item.id).toList();
+    final rate = subLogs.isNotEmpty ? subLogs.length / 3.0 : 0.0;
+    return _gemini!.generateGoalRebuildOptions(
+      category: catTitle,
+      subCategory: item.name,
+      diaryContent: _todayDiary?.content,
+      achievementRate: rate.clamp(0.0, 1.0),
+    );
   }
 
   // ── Character & Shop ─────────────────────────────────────────

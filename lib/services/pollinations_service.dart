@@ -56,16 +56,32 @@ class PollinationsService {
 
   static String _outfitDesc(String? outfitId) {
     const map = {
-      'school_uniform': 'Japanese school uniform',
-      'casual_tshirt': 'casual t-shirt and jeans',
-      'sporty': 'athletic sportswear',
-      'formal': 'elegant formal dress',
-      'traditional': 'traditional Asian hanfu',
-      'hoodie': 'cozy hoodie',
-      'dress': 'cute summer dress',
-      'suit': 'sharp suit',
+      'school_uniform': 'Japanese high school uniform with pleated skirt',
+      'casual_tshirt': 'casual white t-shirt and light blue jeans',
+      'sporty': 'athletic sportswear, compression leggings, sneakers',
+      'formal': 'elegant formal evening dress with heels',
+      'traditional': 'traditional Chinese hanfu with flowing sleeves',
+      'hoodie': 'oversized cozy hoodie and shorts',
+      'dress': 'cute floral summer dress with sandals',
+      'suit': 'sharp business suit with tie',
     };
-    return map[outfitId] ?? 'stylish casual outfit';
+    return map[outfitId] ?? 'stylish casual outfit, jeans and blouse';
+  }
+
+  static String _backgroundDesc(String? outfitId, String relationship) {
+    final bg = {
+      'school_uniform': 'sakura blossom school courtyard',
+      'sporty': 'modern gym with equipment',
+      'formal': 'elegant ballroom interior',
+      'traditional': 'classical Chinese garden',
+      'hoodie': 'cozy bedroom with warm lighting',
+      'dress': 'sunny outdoor park',
+      'suit': 'city office rooftop',
+    }[outfitId] ?? 'soft pastel gradient studio background';
+
+    if (relationship == '親密') return '$bg, close warm atmosphere, bokeh depth';
+    if (relationship == '曖昧') return '$bg, soft romantic lighting';
+    return '$bg, clean bright lighting';
   }
 
   static int _appearanceSeed({
@@ -99,19 +115,23 @@ class PollinationsService {
     final hair = '${_hairStyleDesc(hairStyle)}, ${_hairColorDesc(hairColor)}';
     final body = _bodyDesc(muscleLevel, fatLevel);
     final outfit = _outfitDesc(outfitId);
+    final background = _backgroundDesc(outfitId, relationship);
     final modeHint = isMirror ? 'romantic partner character' : 'personal companion character';
+    final framingHint = relationship == '親密'
+        ? 'medium full body shot, from knees up'
+        : 'full body shot, standing, head to toe visible';
 
     final prompt =
-        'high quality anime illustration, $genderWord, age 25, '
-        '$body, $skin, $hair, $outfit, $expression, '
-        '$modeHint, front-facing full body, '
-        'soft pastel gradient background, detailed anime art style, '
-        'soft lighting, no text, no watermark, masterpiece quality';
+        'high quality anime illustration, $genderWord, age 22, '
+        '$body, $skin, $hair, wearing $outfit, $expression, '
+        '$modeHint, $framingHint, facing viewer, '
+        '$background, detailed anime art style, '
+        'soft lighting, sharp details, no text, no watermark, masterpiece quality';
 
     final seed = _appearanceSeed(
       skin: skinTone, hairStyle: hairStyle, hairColor: hairColor, outfit: outfitId);
     final encoded = Uri.encodeComponent(prompt);
-    final url = '$_base/$encoded?width=512&height=768&nologo=true&seed=$seed';
+    final url = '$_base/$encoded?width=512&height=896&nologo=true&seed=$seed';
 
     try {
       final res = await http.get(Uri.parse(url))

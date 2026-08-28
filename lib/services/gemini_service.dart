@@ -368,7 +368,7 @@ $characterName：''';
   "advanced": ["進階目標（需要努力，有挑戰性）"],
   "elite": ["精英目標（高標準，需要持續努力）"]
 }
-每個難度只給1個具體目標描述，要有數字或明確標準，例如「每天30分鐘」「每週3次」。
+每個難度只給1個具體目標描述，要有數字或明確標準，不要限定在固定分鐘數，用自然語言描述。
 只輸出JSON。''';
     try {
       final res = await _gen([Content.text(prompt)]);
@@ -377,6 +377,116 @@ $characterName：''';
       return decoded;
     } catch (_) {
       return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> generateGoalRebuildOptions({
+    required String category,
+    required String subCategory,
+    required String? diaryContent,
+    required double achievementRate,
+  }) async {
+    final rateStr = '${(achievementRate * 100).round()}%';
+    final diaryHint = diaryContent?.isNotEmpty == true ? '最近日記：「${diaryContent!.substring(0, diaryContent.length.clamp(0, 100))}」' : '';
+    final prompt = '''使用者正在「$category - $subCategory」項目上設定目標。
+歷史達成率：$rateStr
+$diaryHint
+
+請生成3個不同風格的目標方案，讓使用者選擇最適合的：
+1. 激進版：高強度、短時間見效、需要較大毅力
+2. 穩健版：適中節奏、循序漸進、適合長期維持
+3. 輕量版：輕鬆友善、適合入門或忙碌時維持
+
+每個方案包含：
+- name: 方案名稱（激進版/穩健版/輕量版）
+- description: 方案說明（30字以內，說明這個方案的核心精神）
+- mini: 入門目標（自然語言描述，不要固定分鐘格式）
+- advanced: 進階目標
+- elite: 精英目標
+
+JSON格式：
+[
+  {"name":"激進版","description":"...","mini":"...","advanced":"...","elite":"..."},
+  {"name":"穩健版","description":"...","mini":"...","advanced":"...","elite":"..."},
+  {"name":"輕量版","description":"...","mini":"...","advanced":"...","elite":"..."}
+]
+只輸出JSON陣列。''';
+    try {
+      final res = await _gen([Content.text(prompt)]);
+      final text = (res.text ?? '').replaceAll('```json', '').replaceAll('```', '').trim();
+      final start = text.indexOf('[');
+      final end = text.lastIndexOf(']');
+      if (start < 0 || end < 0) return _fallbackRebuildOptions(subCategory);
+      final list = jsonDecode(text.substring(start, end + 1)) as List;
+      return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (_) {
+      return _fallbackRebuildOptions(subCategory);
+    }
+  }
+
+  List<Map<String, dynamic>> _fallbackRebuildOptions(String sub) => [
+    {'name': '激進版', 'description': '全力衝刺，短期看到明顯成效', 'mini': '每天專注練習 $sub，不中斷', 'advanced': '每週高強度訓練，超越舒適圈', 'elite': '達到專業水準表現'},
+    {'name': '穩健版', 'description': '循序漸進，長期維持是關鍵', 'mini': '每週至少練習 $sub 兩到三次', 'advanced': '每週穩定達成既定計畫', 'elite': '持續三個月不間斷'},
+    {'name': '輕量版', 'description': '輕鬆融入生活，無壓力進行', 'mini': '每週一次，持之以恆', 'advanced': '每週兩次，感受進步', 'elite': '每週三次，建立習慣'},
+  ];
+
+  Future<String> generateWeeklyReport({
+    required String nickname,
+    required List<Map<String, dynamic>> weeklyData,
+    required int goalCompletions,
+    required int bonusDone,
+    required String? diaryContent,
+  }) async {
+    final avgCal = weeklyData.isEmpty ? 0 : weeklyData.fold<double>(0, (s, d) => s + (d['calories'] as double)) / weeklyData.length;
+    final prompt = '''請為使用者「$nickname」生成本週健康報告（繁體中文）。
+
+本週數據：
+- 平均每日熱量：${avgCal.round()} kcal
+- 目標達成次數：$goalCompletions 次
+- Bonus 挑戰完成：$bonusDone 個
+- 日記摘要：${diaryContent?.isNotEmpty == true ? diaryContent!.substring(0, diaryContent!.length.clamp(0, 100)) : '未填寫'}
+
+請以溫柔朋友的語氣，分三段：
+1. ✨ 這週做得好的地方（1-2點）
+2. 💪 可以加強的地方（1-2點，正向建議語氣）
+3. 🎯 下週建議重點（1-2點具體行動）
+
+約200字，真誠有溫度。''';
+    try {
+      final res = await _gen([Content.text(prompt)]);
+      return res.text?.trim() ?? '這週你很努力了！繼續保持。';
+    } catch (_) {
+      return '這週你很努力了！繼續保持。';
+    }
+  }
+
+  Future<String> generateMonthlyReport({
+    required String nickname,
+    required int totalDays,
+    required int activeDays,
+    required double avgCalories,
+    required double targetCalories,
+    required int totalGoalPoints,
+    required int growthPoints,
+  }) async {
+    final prompt = '''請為使用者「$nickname」生成本月健康回顧（繁體中文）。
+
+本月數據：
+- 記錄天數：$activeDays / $totalDays 天
+- 平均每日熱量：${avgCalories.round()} / ${targetCalories.round()} kcal
+- 目標總點數：$totalGoalPoints 點
+- 成長點數：$growthPoints 點
+
+請生成一份有溫度的月度報告，包含：
+1. 🌟 本月最大亮點
+2. 📈 進步趨勢分析
+3. 🔮 下個月的可能性
+約250字，像朋友寫給你的信。''';
+    try {
+      final res = await _gen([Content.text(prompt)]);
+      return res.text?.trim() ?? '本月你很棒！期待下個月的你。';
+    } catch (_) {
+      return '本月你很棒！期待下個月的你。';
     }
   }
 

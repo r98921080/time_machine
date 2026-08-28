@@ -6,33 +6,50 @@ import '../../models/bonus_challenge.dart';
 import '../knowledge/knowledge_screen.dart';
 import '../diary/diary_screen.dart';
 import '../shop/shop_screen.dart';
+import 'stats_widgets.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tab;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final profile = provider.profile;
     if (profile == null) return const SizedBox.shrink();
-
-    final target = profile.calculatedCalorieTarget;
-    final current = provider.todayCalories;
-    final ratio = target > 0 ? (current / target).clamp(0.0, 1.2) : 0.0;
-    final points = provider.todayGoalPoints;
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
+      body: NestedScrollView(
+        headerSliverBuilder: (context, _) => [
           SliverAppBar(
-            expandedHeight: 120,
+            expandedHeight: 100,
             floating: true,
+            snap: true,
             flexibleSpace: FlexibleSpaceBar(
               title: Text('早安，${profile.nickname}',
                   style: theme.textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.bold)),
-              titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
+              titlePadding: const EdgeInsets.only(left: 16, bottom: 48),
             ),
             actions: [
               Padding(
@@ -45,51 +62,73 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                // Calorie Progress Card
-                _CalorieCard(current: current, target: target, ratio: ratio, theme: theme),
-                const SizedBox(height: 12),
-                // Growth Points + Goal Points Row
-                Row(children: [
-                  Expanded(child: _StatMiniCard(
-                    icon: Icons.star, color: Colors.amber,
-                    label: '成長點數', value: '${profile.growthPoints}', theme: theme)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _StatMiniCard(
-                    icon: Icons.track_changes, color: Colors.green,
-                    label: '今日目標點', value: '$points', theme: theme)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _StatMiniCard(
-                    icon: Icons.local_fire_department, color: Colors.orange,
-                    label: '蛋白質', value: '${provider.todayProtein.round()}g', theme: theme)),
-                ]),
-                const SizedBox(height: 16),
-                // Bonus Challenges
-                if (provider.bonusChallenges.isNotEmpty) ...[
-                  _BonusChallengesCard(
-                      challenges: provider.bonusChallenges,
-                      provider: provider,
-                      theme: theme),
-                  const SizedBox(height: 12),
-                ],
-                // Daily Knowledge Card
-                _KnowledgeTeaser(theme: theme),
-                const SizedBox(height: 12),
-                // Shop Teaser
-                _ShopTeaser(points: profile.growthPoints, theme: theme),
-                const SizedBox(height: 12),
-                // Today Vlog / Diary
-                _TodaySummaryCard(provider: provider, theme: theme),
-                const SizedBox(height: 80),
-              ]),
+            bottom: TabBar(
+              controller: _tab,
+              tabs: const [
+                Tab(text: '首頁'),
+                Tab(text: '統計'),
+              ],
             ),
           ),
         ],
+        body: TabBarView(
+          controller: _tab,
+          children: const [
+            _HomeTab(),
+            StatisticsTab(),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _HomeTab extends StatelessWidget {
+  const _HomeTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    final profile = provider.profile!;
+    final target = profile.calculatedCalorieTarget;
+    final current = provider.todayCalories;
+    final ratio = target > 0 ? (current / target).clamp(0.0, 1.2) : 0.0;
+    final points = provider.todayGoalPoints;
+    final theme = Theme.of(context);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _CalorieCard(current: current, target: target, ratio: ratio, theme: theme),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: _StatMiniCard(
+            icon: Icons.star, color: Colors.amber,
+            label: '成長點數', value: '${profile.growthPoints}', theme: theme)),
+          const SizedBox(width: 8),
+          Expanded(child: _StatMiniCard(
+            icon: Icons.track_changes, color: Colors.green,
+            label: '今日目標點', value: '$points', theme: theme)),
+          const SizedBox(width: 8),
+          Expanded(child: _StatMiniCard(
+            icon: Icons.local_fire_department, color: Colors.orange,
+            label: '蛋白質', value: '${provider.todayProtein.round()}g', theme: theme)),
+        ]),
+        const SizedBox(height: 16),
+        if (provider.bonusChallenges.isNotEmpty) ...[
+          _BonusChallengesCard(
+              challenges: provider.bonusChallenges,
+              provider: provider,
+              theme: theme),
+          const SizedBox(height: 12),
+        ],
+        _KnowledgeTeaser(theme: theme),
+        const SizedBox(height: 12),
+        _ShopTeaser(points: profile.growthPoints, theme: theme),
+        const SizedBox(height: 12),
+        _TodaySummaryCard(provider: provider, theme: theme),
+        const SizedBox(height: 80),
+      ],
     );
   }
 }

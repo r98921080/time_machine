@@ -49,40 +49,62 @@ class DiaryEntry {
 class VlogEntry {
   final String id;
   final String profileId;
-  final String narrative;
+  String narrative;
+  String? editedNarrative;
   final String style;
   final String performanceTag;
   final Map<String, dynamic> stats;
   final DateTime date;
+  List<String> photoPaths;
 
-  const VlogEntry({
+  VlogEntry({
     required this.id,
     required this.profileId,
     required this.narrative,
+    this.editedNarrative,
     required this.style,
     required this.performanceTag,
     required this.stats,
     required this.date,
-  });
+    List<String>? photoPaths,
+  }) : photoPaths = photoPaths ?? [];
+
+  String get displayNarrative => editedNarrative?.isNotEmpty == true ? editedNarrative! : narrative;
 
   Map<String, dynamic> toMap() => {
     'id': id,
     'profileId': profileId,
     'narrative': narrative,
+    'editedNarrative': editedNarrative,
     'style': style,
     'performanceTag': performanceTag,
     'stats': stats,
     'date': date.toIso8601String(),
+    'photoPaths': photoPaths,
   };
 
   factory VlogEntry.fromMap(Map<String, dynamic> m) => VlogEntry(
     id: m['id'] as String,
     profileId: m['profileId'] as String,
     narrative: m['narrative'] as String,
+    editedNarrative: m['editedNarrative'] as String?,
     style: m['style'] as String,
     performanceTag: m['performanceTag'] as String,
     stats: Map<String, dynamic>.from(m['stats'] as Map),
     date: DateTime.parse(m['date'] as String),
+    photoPaths: List<String>.from(m['photoPaths'] as List? ?? []),
+  );
+
+  VlogEntry copyWith({String? editedNarrative, List<String>? photoPaths}) => VlogEntry(
+    id: id,
+    profileId: profileId,
+    narrative: narrative,
+    editedNarrative: editedNarrative ?? this.editedNarrative,
+    style: style,
+    performanceTag: performanceTag,
+    stats: stats,
+    date: date,
+    photoPaths: photoPaths ?? this.photoPaths,
   );
 }
 

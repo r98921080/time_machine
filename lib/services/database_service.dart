@@ -374,12 +374,34 @@ class DatabaseService {
 
   static Future<void> saveVlog(VlogEntry vlog) async {
     final d = await db;
-    await d.insert('vlog_entries', {
-      'id': vlog.id,
-      'profileId': vlog.profileId,
-      'date': vlog.date.toIso8601String(),
-      'data': jsonEncode(vlog.toMap()),
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    // Upsert by (profileId, date-prefix) so same-day re-generate overwrites
+    final dateKey = vlog.date.toIso8601String().substring(0, 10);
+    final existing = await d.query('vlog_entries',
+        where: "profileId = ? AND date LIKE ?",
+        whereArgs: [vlog.profileId, '$dateKey%'], limit: 1);
+    if (existing.isNotEmpty) {
+      // Overwrite with same row id
+      final existingId = existing.first['id'] as String;
+      final updatedMap = vlog.toMap()..['id'] = existingId;
+      await d.update('vlog_entries',
+          {'id': existingId, 'profileId': vlog.profileId,
+           'date': vlog.date.toIso8601String(), 'data': jsonEncode(updatedMap)},
+          where: 'id = ?', whereArgs: [existingId]);
+    } else {
+      await d.insert('vlog_entries', {
+        'id': vlog.id,
+        'profileId': vlog.profileId,
+        'date': vlog.date.toIso8601String(),
+        'data': jsonEncode(vlog.toMap()),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
+
+  static Future<void> updateVlog(VlogEntry vlog) async {
+    final d = await db;
+    await d.update('vlog_entries',
+        {'date': vlog.date.toIso8601String(), 'data': jsonEncode(vlog.toMap())},
+        where: 'id = ?', whereArgs: [vlog.id]);
   }
 
   static Future<List<VlogEntry>> getRecentVlogs(String profileId, int limit) async {
@@ -400,6 +422,44 @@ class DatabaseService {
         limit: 1);
     if (rows.isEmpty) return null;
     return VlogEntry.fromMap(jsonDecode(rows.first['data'] as String));
+  }
+
+  static Future<List<Map<String, dynamic>>> getMonthlyData(String profileId, int year, int month) async {
+    final d = await db;
+    final start = DateTime(year, month, 1);
+    final end = DateTime(year, month + 1, 1);
+    final rows = await d.query('meals',
+        where: 'profileId = ? AND timestamp >= ? AND timestamp < ?',
+        whereArgs: [profileId, start.toIso8601String(), end.toIso8601String()],
+        orderBy: 'timestamp ASC');
+    final meals = rows.map((r) => Meal.fromMap(jsonDecode(r['data'] as String))).toList();
+    final Map<int, Map<String, dynamic>> byDay = {};
+    for (var day = 1; day <= DateTime(year, month + 1, 0).day; day++) {
+      byDay[day] = {'day': day, 'calories': 0.0, 'protein': 0.0};
+    }
+    for (final m in meals) {
+      final day = m.timestamp.day;
+      if (byDay.containsKey(day)) {
+        byDay[day]!['calories'] = (byDay[day]!['calories'] as double) + m.totalCalories;
+        byDay[day]!['protein'] = (byDay[day]!['protein'] as double) + m.protein;
+      }
+    }
+    return byDay.values.toList();
+  }
+
+  static Future<List<Map<String, dynamic>>> getWeeklyGoalCompletion(String profileId) async {
+    final d = await db;
+    final start = DateTime.now().subtract(const Duration(days: 6));
+    final startStr = DateTime(start.year, start.month, start.day).toIso8601String();
+    final rows = await d.rawQuery(
+      "SELECT date, data FROM goal_logs WHERE profileId = ? AND date >= ? ORDER BY date ASC",
+      [profileId, startStr]);
+    final Map<String, int> byDay = {};
+    for (final r in rows) {
+      final dateKey = (r['date'] as String).substring(0, 10);
+      byDay[dateKey] = (byDay[dateKey] ?? 0) + 1;
+    }
+    return byDay.entries.map((e) => {'date': e.key, 'completions': e.value}).toList();
   }
 
   // ── Character ─────────────────────────────────────────────────
