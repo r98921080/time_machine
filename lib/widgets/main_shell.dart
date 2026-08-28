@@ -3,7 +3,6 @@ import '../screens/home/home_screen.dart';
 import '../screens/record/record_screen.dart';
 import '../screens/goals/goals_screen.dart';
 import '../screens/character/character_screen.dart';
-import '../screens/vlog/vlog_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -20,7 +19,6 @@ class _MainShellState extends State<MainShell> {
     RecordScreen(),
     GoalsScreen(),
     CharacterScreen(),
-    VlogScreen(),
   ];
 
   @override
@@ -50,11 +48,6 @@ class _MainShellState extends State<MainShell> {
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: '角色',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.play_circle_outline),
-            selectedIcon: Icon(Icons.play_circle),
-            label: 'Vlog',
           ),
         ],
       ),

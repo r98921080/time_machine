@@ -21,6 +21,32 @@ extension BodyGoalExt on BodyGoal {
   }
 }
 
+// EXP thresholds per relationship level
+const relationshipLevels = [
+  '陌生人',     // 0 – 99
+  '普通朋友',   // 100 – 299
+  '熟悉',       // 300 – 599
+  '好友',       // 600 – 999
+  '曖昧',       // 1000 – 1499
+  '親密',       // 1500+
+];
+
+const relationshipExpThresholds = [0, 100, 300, 600, 1000, 1500];
+
+String expToRelationship(int exp) {
+  for (int i = relationshipExpThresholds.length - 1; i >= 0; i--) {
+    if (exp >= relationshipExpThresholds[i]) return relationshipLevels[i];
+  }
+  return '陌生人';
+}
+
+int nextRelationshipExp(int exp) {
+  for (int i = 0; i < relationshipExpThresholds.length; i++) {
+    if (exp < relationshipExpThresholds[i]) return relationshipExpThresholds[i];
+  }
+  return -1; // maxed out
+}
+
 class UserProfile {
   final String id;
   String nickname;
@@ -38,6 +64,14 @@ class UserProfile {
   String? characterName;
   DateTime createdAt;
 
+  // New fields v4
+  int loginStreak;
+  int reviveCards;
+  int characterExp;
+  DateTime? lastProactiveDate;
+  String? morningIntent;
+  String? lastMorningIntentDate;
+
   UserProfile({
     String? id,
     required this.nickname,
@@ -54,6 +88,12 @@ class UserProfile {
     this.mirrorGender,
     this.characterName,
     DateTime? createdAt,
+    this.loginStreak = 0,
+    this.reviveCards = 1,
+    this.characterExp = 0,
+    this.lastProactiveDate,
+    this.morningIntent,
+    this.lastMorningIntentDate,
   }) : id = id ?? const Uuid().v4(),
        createdAt = createdAt ?? DateTime.now();
 
@@ -72,6 +112,15 @@ class UserProfile {
     return dailyCalorieTarget;
   }
 
+  String get relationshipLevel => expToRelationship(characterExp);
+  int get nextRelationshipExpTarget => nextRelationshipExp(characterExp);
+  int get currentLevelExp {
+    for (int i = relationshipExpThresholds.length - 1; i >= 0; i--) {
+      if (characterExp >= relationshipExpThresholds[i]) return relationshipExpThresholds[i];
+    }
+    return 0;
+  }
+
   Map<String, dynamic> toMap() => {
     'id': id,
     'nickname': nickname,
@@ -88,6 +137,12 @@ class UserProfile {
     'mirrorGender': mirrorGender,
     'characterName': characterName,
     'createdAt': createdAt.toIso8601String(),
+    'loginStreak': loginStreak,
+    'reviveCards': reviveCards,
+    'characterExp': characterExp,
+    'lastProactiveDate': lastProactiveDate?.toIso8601String(),
+    'morningIntent': morningIntent,
+    'lastMorningIntentDate': lastMorningIntentDate,
   };
 
   factory UserProfile.fromMap(Map<String, dynamic> m) => UserProfile(
@@ -111,6 +166,14 @@ class UserProfile {
     mirrorGender: m['mirrorGender'] as String?,
     characterName: m['characterName'] as String?,
     createdAt: DateTime.parse(m['createdAt'] as String),
+    loginStreak: m['loginStreak'] as int? ?? 0,
+    reviveCards: m['reviveCards'] as int? ?? 1,
+    characterExp: m['characterExp'] as int? ?? 0,
+    lastProactiveDate: m['lastProactiveDate'] != null
+        ? DateTime.tryParse(m['lastProactiveDate'] as String)
+        : null,
+    morningIntent: m['morningIntent'] as String?,
+    lastMorningIntentDate: m['lastMorningIntentDate'] as String?,
   );
 
   UserProfile copyWith({
@@ -127,6 +190,12 @@ class UserProfile {
     CharacterMode? characterMode,
     String? mirrorGender,
     Object? characterName = _sentinel,
+    int? loginStreak,
+    int? reviveCards,
+    int? characterExp,
+    Object? lastProactiveDate = _sentinel,
+    Object? morningIntent = _sentinel,
+    Object? lastMorningIntentDate = _sentinel,
   }) => UserProfile(
     id: id,
     nickname: nickname ?? this.nickname,
@@ -141,10 +210,14 @@ class UserProfile {
     lastLogDate: lastLogDate ?? this.lastLogDate,
     characterMode: characterMode ?? this.characterMode,
     mirrorGender: mirrorGender ?? this.mirrorGender,
-    characterName: characterName == _sentinel
-        ? this.characterName
-        : characterName as String?,
+    characterName: characterName == _sentinel ? this.characterName : characterName as String?,
     createdAt: createdAt,
+    loginStreak: loginStreak ?? this.loginStreak,
+    reviveCards: reviveCards ?? this.reviveCards,
+    characterExp: characterExp ?? this.characterExp,
+    lastProactiveDate: lastProactiveDate == _sentinel ? this.lastProactiveDate : lastProactiveDate as DateTime?,
+    morningIntent: morningIntent == _sentinel ? this.morningIntent : morningIntent as String?,
+    lastMorningIntentDate: lastMorningIntentDate == _sentinel ? this.lastMorningIntentDate : lastMorningIntentDate as String?,
   );
 }
 

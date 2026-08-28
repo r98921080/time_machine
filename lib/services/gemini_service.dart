@@ -4,7 +4,7 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:http/http.dart' as http;
 
 class GeminiService {
-  static const _model = 'gemini-3.6-flash';
+  static const _model = 'gemini-2.0-flash';
 
   final String _apiKey;
   final GenerativeModel _textModel;
@@ -57,7 +57,7 @@ class GeminiService {
         DataPart('image/jpeg', imageBytes),
         TextPart(prompt),
       ]),
-    ]);
+    ]).timeout(_timeout);
     return response.text ?? '無法分析，請稍後再試。';
   }
 
@@ -110,14 +110,14 @@ class GeminiService {
           DataPart('image/jpeg', imageBytes),
           TextPart(prompt),
         ]),
-      ]);
+      ]).timeout(_timeout);
       return response.text?.trim() ?? '';
     } catch (_) {
       return '';
     }
   }
 
-  // ── Diary Auto-completion ────────────────────────────────────
+  // ── Diary ────────────────────────────────────────────────────
 
   Future<String> completeDiary(String partialContent, String nickname) async {
     final prompt = '''你是一個溫柔的日記AI助手。
@@ -130,7 +130,22 @@ class GeminiService {
     return response.text ?? '';
   }
 
-  // ── Todo Extraction ──────────────────────────────────────────
+  Future<String> generateDiaryTitle(String content) async {
+    final prompt = '''請根據以下日記內容，生成一個極具創意、幽默或富有詩意的標題（5個字以內）。
+標題應該能深刻反映當天的情緒或獨特事件，避免平庸描述。
+例如：快樂採菇人、旋轉的陀螺、人生的低谷、突破的前夕
+
+日記內容：
+"${content.length > 200 ? content.substring(0, 200) : content}"
+
+請直接回傳標題文字，不要有引號或其他符號。''';
+    try {
+      final response = await _gen([Content.text(prompt)]);
+      return response.text?.trim() ?? '今日記錄';
+    } catch (_) {
+      return '今日記錄';
+    }
+  }
 
   Future<List<String>> extractTodos(String diaryContent) async {
     final prompt = '''從以下日記中提取可能的待辦事項（用繁體中文列出，每行一個，最多5個）：
@@ -141,6 +156,132 @@ $diaryContent
     final response = await _gen([Content.text(prompt)]);
     final text = response.text ?? '';
     return text.split('\n').where((l) => l.trim().isNotEmpty).take(5).toList();
+  }
+
+  // ── Deep Life Analysis (5 dimensions) ────────────────────────
+
+  Future<Map<String, String>> performDeepLifeAnalysis({
+    required List<String> categories,
+    required List<Map<String, dynamic>> recentLogs,
+    required String? diaryContent,
+    required int? moodScore,
+    required int? energyScore,
+    required String nickname,
+  }) async {
+    final prompt = '''你是一位全方位的生命教練與心理學家，深刻理解人性。
+請根據使用者「$nickname」的所有數據，進行深度的生活狀態分析。
+
+數據：
+- 目標類別：${categories.join('、')}
+- 最近目標達成紀錄：${recentLogs.length}筆
+- 今日日記摘要：${diaryContent?.isNotEmpty == true ? '"${diaryContent!.substring(0, diaryContent.length.clamp(0, 150))}"' : '（未填寫）'}
+- 今日情緒評分：${moodScore != null ? '$moodScore/5分' : '（未記錄）'}
+- 今日精力評分：${energyScore != null ? '$energyScore/10分' : '（未記錄）'}
+
+請深度分析以下五個維度（每個維度2-4句，直接說重點，避免廢話）：
+
+1. 情緒心理：目前的情緒狀態、潛在壓力或動力來源
+2. 生活平衡：工作、休閒、健康的平衡狀況
+3. 個人建議：3個具體可執行的行動建議
+4. 目標洞見：目前目標是否需要微調？有哪些值得關注的模式？
+5. 成長亮點：這個人身上讓你印象深刻的優點或潛力
+
+輸出JSON格式：
+{
+  "emotions": "情緒心理分析",
+  "balance": "生活平衡分析",
+  "advice": "個人建議",
+  "goalInsight": "目標洞見",
+  "growth": "成長亮點"
+}
+
+只輸出JSON，語氣像朋友在對話，不要太正式。''';
+    try {
+      final res = await _chatGen([Content.text(prompt)]);
+      final text = (res.text ?? '').replaceAll('```json', '').replaceAll('```', '').trim();
+      final start = text.indexOf('{');
+      final end = text.lastIndexOf('}');
+      if (start < 0 || end < 0) return _fallbackAnalysis();
+      final decoded = jsonDecode(text.substring(start, end + 1)) as Map;
+      return {
+        'emotions': decoded['emotions'] as String? ?? '',
+        'balance': decoded['balance'] as String? ?? '',
+        'advice': decoded['advice'] as String? ?? '',
+        'goalInsight': decoded['goalInsight'] as String? ?? '',
+        'growth': decoded['growth'] as String? ?? '',
+      };
+    } catch (_) {
+      return _fallbackAnalysis();
+    }
+  }
+
+  Map<String, String> _fallbackAnalysis() => {
+    'emotions': '你今天似乎有在努力，情緒狀態值得持續觀察。',
+    'balance': '記得在高強度的努力之餘，給自己留些空間休息。',
+    'advice': '1. 今天完成最重要的一件事 2. 喝足夠的水 3. 睡前花5分鐘回顧今天',
+    'goalInsight': '繼續保持記錄的習慣，數據累積後會有更清晰的洞見。',
+    'growth': '你願意用APP追蹤自己，這本身就是自我成長意識的展現。',
+  };
+
+  // ── Mood Correlation ─────────────────────────────────────────
+
+  Future<String> generateMoodCorrelation({
+    required List<Map<String, dynamic>> weekMoods,
+    required List<Map<String, dynamic>> weekGoals,
+  }) async {
+    final prompt = '''根據以下一週的情緒和目標數據，分析兩者之間的相關性，用一段話說明（50字以內）：
+
+情緒數據（日期:評分）：${weekMoods.map((m) => '${m['date']}:${m['score']}').join(', ')}
+目標達成數據（日期:點數）：${weekGoals.map((g) => '${g['date']}:${g['points']}').join(', ')}
+
+請輸出一句洞見，例如：「完成目標的那天，你的情緒評分平均高出 X 分」''';
+    try {
+      final res = await _gen([Content.text(prompt)]);
+      return res.text?.trim() ?? '數據積累中，洞見即將浮現。';
+    } catch (_) {
+      return '持續記錄，讓AI找出你的最佳狀態規律。';
+    }
+  }
+
+  // ── Proactive Character Message ───────────────────────────────
+
+  Future<String> generateCharacterProactiveMessage({
+    required String characterName,
+    required String relationship,
+    required String nickname,
+    required double caloriesRatio,
+    required int goalPoints,
+    required int loginStreak,
+    required String? diaryContent,
+    required String gender,
+    required String? styleHint,
+  }) async {
+    String trigger;
+    if (loginStreak >= 7) {
+      trigger = '連續登入第$loginStreak天，使用者非常有毅力';
+    } else if (caloriesRatio < 0.5) {
+      trigger = '今天進食量偏少（只達到目標${(caloriesRatio * 100).round()}%），有點擔心';
+    } else if (caloriesRatio > 1.2) {
+      trigger = '今天吃超過目標${(caloriesRatio * 100).round()}%，想溫柔提醒一下';
+    } else if (goalPoints >= 5) {
+      trigger = '今天目標達成了$goalPoints點，想給予鼓勵';
+    } else {
+      trigger = '今天比較平淡，想說點什麼讓使用者感受到關心';
+    }
+
+    final prompt = '''你是「$characterName」，與「$nickname」的關係是「$relationship」。
+${styleHint?.isNotEmpty == true ? '說話風格：$styleHint' : ''}
+觸發原因：$trigger
+${diaryContent?.isNotEmpty == true ? '日記摘要：「${diaryContent!.substring(0, diaryContent.length.clamp(0, 80))}」' : ''}
+
+請自然地主動傳一則訊息給使用者（25-50字），不要開頭說「嗯」「好的」「我來」。
+要符合關係親密度（$relationship），感覺像真實的人在傳訊息，不是機器人通知。''';
+    try {
+      final res = await _chatGen([Content.text(prompt)]);
+      return res.text?.trim() ?? '嘿，今天過得怎麼樣？';
+    } catch (_) {
+      return '嘿，記得照顧好自己喔 ✨';
+    }
   }
 
   // ── Bonus Challenges ─────────────────────────────────────────
@@ -201,7 +342,7 @@ $diaryContent
     {'type': 'emotional', 'title': '傳一則暖心訊息給朋友'},
   ];
 
-  // ── Goal Review ──────────────────────────────────────────────
+  // ── Goal AI ───────────────────────────────────────────────────
 
   Future<String> reviewGoals({
     required String nickname,
@@ -223,100 +364,6 @@ $diaryContent
     final response = await _gen([Content.text(prompt)]);
     return response.text ?? '繼續加油！';
   }
-
-  static const _timeout = Duration(seconds: 30);
-  static const _chatTimeout = Duration(seconds: 120);
-
-  Future<GenerateContentResponse> _gen(List<Content> content) =>
-      _textModel.generateContent(content).timeout(_timeout);
-
-  Future<GenerateContentResponse> _chatGen(List<Content> content) =>
-      _textModel.generateContent(content).timeout(_chatTimeout);
-
-  // ── Character Chat (no fallback — throws on failure) ─────────
-
-  Future<String> chatWithCharacter({
-    required String characterName,
-    required String relationship,
-    required bool isMirror,
-    required String gender,
-    required List<Map<String, String>> history,
-    required String userMessage,
-    required Map<String, dynamic> todayData,
-    String? memorySummary,
-  }) async {
-    final isGirl = gender == '她' || gender == '女';
-    final roleHint = isMirror
-        ? '你是個${isGirl ? '女生' : '男生'}，正在和對方聊天，對他有好感但不急著表白。'
-        : '你是使用者的AI夥伴，像個有趣的朋友一起聊天。';
-
-    final relHint = {
-          '陌生人': '剛認識，保持適當距離，偶爾好奇',
-          '朋友': '熟悉的朋友，可以開玩笑，輕鬆',
-          '曖昧': '互有好感，說話帶點曖昧，偶爾心跳',
-          '親密': '非常親近，懂對方的心，很有默契',
-        }[relationship] ??
-        '正常朋友';
-
-    // History: include all messages; compress old ones if >50
-    String histStr = '';
-    if (memorySummary != null && memorySummary.isNotEmpty) {
-      histStr = '【過去的對話記憶摘要】\n$memorySummary\n\n';
-    }
-    final recent = history.length > 50 ? history.sublist(history.length - 50) : history;
-    if (recent.isNotEmpty) {
-      histStr += '【近期對話】\n${recent.map((h) => '${h['role'] == 'user' ? '他' : characterName}：${h['content']}').join('\n')}\n\n';
-    }
-
-    final cal = (todayData['calories'] as num?)?.round() ?? 0;
-    final pts = todayData['goalPoints'] ?? 0;
-    final diary = todayData['diary'] as String? ?? '';
-    final contextHint = cal > 0
-        ? '（背景：他今天吃了 $cal kcal，積分 $pts 點${diary.isNotEmpty ? '，日記：「${diary.length > 50 ? diary.substring(0, 50) + '…' : diary}」' : ''}。有機會自然帶入，但不要每次都說。）'
-        : '';
-
-    final prompt = '''你叫$characterName。$roleHint 關係：$relHint。$contextHint
-
-$histStr他說：「$userMessage」
-
-你（$characterName）的回應——
-要求：
-- 直接針對「他說」的內容回應，不要忽略他說的話
-- 口語化繁體中文，不超過80字
-- 禁止用「嗯」「好的」「原來如此」「我在聽」「辛苦了」開頭
-- 有自己的個性，像真實的人在聊天
-- 如果他問你問題，就認真回答那個問題
-- 可以參考過去對話記憶來回應，展示你記得他說過的事
-$characterName：''';
-
-    final response = await _chatGen([Content.text(prompt)]);
-    final text = response.text?.trim();
-    if (text == null || text.isEmpty) throw Exception('Empty response from Gemini');
-    return text;
-  }
-
-  // ── Character Mirror Response ─────────────────────────────────
-
-  Future<String> getMirrorResponse({
-    required String gender,
-    required double performanceRatio,
-    required String diaryContent,
-  }) async {
-    final level = performanceRatio >= 0.9
-        ? '非常棒'
-        : performanceRatio >= 0.7
-            ? '不錯'
-            : '需要加油';
-    final perspective = gender == '女' || gender == '她' ? '她' : '他';
-    final prompt = '''你是一個溫柔的角色，站在使用者想像中的${perspective}的角度，
-對使用者今天的表現（$level）說一句話。
-語氣要自然、有情感，像是真實的人在說話。20-40字即可。
-今天的日記：${diaryContent.isEmpty ? '（沒有寫日記）' : diaryContent}''';
-    final response = await _gen([Content.text(prompt)]);
-    return response.text ?? '你今天很棒，繼續保持！';
-  }
-
-  // ── Goal AI Suggestions ───────────────────────────────────────
 
   Future<List<String>> suggestGoalSubCategories(String category) async {
     final prompt = '''使用者想設定「$category」類別的目標。
@@ -346,12 +393,6 @@ $characterName：''';
       '工作': ['每日任務規劃', '專注時段', '文件整理', '技能升級', '溝通管理', '會議效率'],
       '創作': ['繪畫', '寫作', '音樂練習', '攝影', '手工藝', '設計', '拍影片', '寫歌'],
       '生活': ['整理家務', '理財記帳', '旅行計畫', '學烹飪', '環保習慣', '興趣培養'],
-      '烹飪': ['中式料理', '日式料理', '烘焙甜點', '健康輕食', '備餐規劃', '刀工練習'],
-      '財務': ['每日記帳', '存款目標', '投資學習', '節省開支', '副業計畫'],
-      '社交': ['聯繫舊友', '參加活動', '拓展人脈', '家人互動'],
-      '健康': ['定期檢查', '補充維生素', '健走', '戒菸戒酒', '保持水分'],
-      '語言': ['英文口說', '日文學習', '詞彙練習', '聽力訓練', '閱讀外文'],
-      '閱讀': ['每日讀書', '閱讀筆記', '書評撰寫', '書單規劃'],
     };
     for (final key in defaults.keys) {
       if (category.contains(key)) return defaults[key]!;
@@ -373,8 +414,7 @@ $characterName：''';
     try {
       final res = await _gen([Content.text(prompt)]);
       final text = (res.text ?? '{}').replaceAll('```json', '').replaceAll('```', '').trim();
-      final decoded = _parseGoalTargets(text);
-      return decoded;
+      return _parseGoalTargets(text);
     } catch (_) {
       return null;
     }
@@ -383,32 +423,38 @@ $characterName：''';
   Future<List<Map<String, dynamic>>> generateGoalRebuildOptions({
     required String category,
     required String subCategory,
+    required String subItemName,
+    required String subItemMini,
+    required String subItemAdvanced,
+    required String subItemElite,
     required String? diaryContent,
     required double achievementRate,
   }) async {
     final rateStr = '${(achievementRate * 100).round()}%';
-    final diaryHint = diaryContent?.isNotEmpty == true ? '最近日記：「${diaryContent!.substring(0, diaryContent.length.clamp(0, 100))}」' : '';
-    final prompt = '''使用者正在「$category - $subCategory」項目上設定目標。
+    final diaryHint = diaryContent?.isNotEmpty == true
+        ? '最近日記：「${diaryContent!.substring(0, diaryContent.length.clamp(0, 100))}」'
+        : '';
+    final prompt = '''使用者在「$category」下有一個具體目標「$subItemName」。
+現有目標設定：
+- 入門：$subItemMini
+- 進階：$subItemAdvanced
+- 精英：$subItemElite
+
 歷史達成率：$rateStr
 $diaryHint
 
-請生成3個不同風格的目標方案，讓使用者選擇最適合的：
-1. 激進版：高強度、短時間見效、需要較大毅力
-2. 穩健版：適中節奏、循序漸進、適合長期維持
-3. 輕量版：輕鬆友善、適合入門或忙碌時維持
+請根據這個具體目標「$subItemName」的性質，生成3個個人化的重建方案：
+1. 激進版：比現在的標準更高一級，需要更大毅力
+2. 穩健版：適中節奏，參考達成率微調，循序漸進
+3. 輕量版：降低門檻，容易維持，適合忙碌時期
 
-每個方案包含：
-- name: 方案名稱（激進版/穩健版/輕量版）
-- description: 方案說明（30字以內，說明這個方案的核心精神）
-- mini: 入門目標（自然語言描述，不要固定分鐘格式）
-- advanced: 進階目標
-- elite: 精英目標
+每個方案的三個級別（入門/進階/精英）都要針對「$subItemName」這件事給出具體描述，不要泛泛而談。
 
 JSON格式：
 [
-  {"name":"激進版","description":"...","mini":"...","advanced":"...","elite":"..."},
-  {"name":"穩健版","description":"...","mini":"...","advanced":"...","elite":"..."},
-  {"name":"輕量版","description":"...","mini":"...","advanced":"...","elite":"..."}
+  {"name":"激進版","description":"方案核心精神（20字以內）","mini":"入門目標","advanced":"進階目標","elite":"精英目標"},
+  {"name":"穩健版","description":"方案核心精神（20字以內）","mini":"入門目標","advanced":"進階目標","elite":"精英目標"},
+  {"name":"輕量版","description":"方案核心精神（20字以內）","mini":"入門目標","advanced":"進階目標","elite":"精英目標"}
 ]
 只輸出JSON陣列。''';
     try {
@@ -416,18 +462,18 @@ JSON格式：
       final text = (res.text ?? '').replaceAll('```json', '').replaceAll('```', '').trim();
       final start = text.indexOf('[');
       final end = text.lastIndexOf(']');
-      if (start < 0 || end < 0) return _fallbackRebuildOptions(subCategory);
+      if (start < 0 || end < 0) return _fallbackRebuildOptions(subItemName);
       final list = jsonDecode(text.substring(start, end + 1)) as List;
       return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
     } catch (_) {
-      return _fallbackRebuildOptions(subCategory);
+      return _fallbackRebuildOptions(subItemName);
     }
   }
 
   List<Map<String, dynamic>> _fallbackRebuildOptions(String sub) => [
-    {'name': '激進版', 'description': '全力衝刺，短期看到明顯成效', 'mini': '每天專注練習 $sub，不中斷', 'advanced': '每週高強度訓練，超越舒適圈', 'elite': '達到專業水準表現'},
-    {'name': '穩健版', 'description': '循序漸進，長期維持是關鍵', 'mini': '每週至少練習 $sub 兩到三次', 'advanced': '每週穩定達成既定計畫', 'elite': '持續三個月不間斷'},
-    {'name': '輕量版', 'description': '輕鬆融入生活，無壓力進行', 'mini': '每週一次，持之以恆', 'advanced': '每週兩次，感受進步', 'elite': '每週三次，建立習慣'},
+    {'name': '激進版', 'description': '全力衝刺，短期看到明顯成效', 'mini': '每天專注練習$sub，絕不中斷', 'advanced': '超越舒適圈，每週高強度執行', 'elite': '達到可量化的專業水準'},
+    {'name': '穩健版', 'description': '循序漸進，長期維持是關鍵', 'mini': '每週至少執行$sub兩到三次', 'advanced': '每週穩定達成既定計畫', 'elite': '持續三個月不間斷'},
+    {'name': '輕量版', 'description': '輕鬆融入生活，無壓力進行', 'mini': '每週一次$sub，持之以恆', 'advanced': '每週兩次，感受微小進步', 'elite': '每週三次，建立習慣'},
   ];
 
   Future<String> generateWeeklyReport({
@@ -437,7 +483,7 @@ JSON格式：
     required int bonusDone,
     required String? diaryContent,
   }) async {
-    final avgCal = weeklyData.isEmpty ? 0 : weeklyData.fold<double>(0, (s, d) => s + (d['calories'] as double)) / weeklyData.length;
+    final avgCal = weeklyData.isEmpty ? 0 : weeklyData.fold<double>(0, (s, d) => s + (d['calories'] as double? ?? 0)) / weeklyData.length;
     final prompt = '''請為使用者「$nickname」生成本週健康報告（繁體中文）。
 
 本週數據：
@@ -490,20 +536,85 @@ JSON格式：
     }
   }
 
-  Map<String, List<String>>? _parseGoalTargets(String json) {
-    try {
-      final mini = RegExp(r'"mini":\s*\["([^"]+)"\]').firstMatch(json)?.group(1);
-      final advanced = RegExp(r'"advanced":\s*\["([^"]+)"\]').firstMatch(json)?.group(1);
-      final elite = RegExp(r'"elite":\s*\["([^"]+)"\]').firstMatch(json)?.group(1);
-      if (mini != null && advanced != null && elite != null) {
-        return {
-          'mini': [mini],
-          'advanced': [advanced],
-          'elite': [elite],
-        };
-      }
-    } catch (_) {}
-    return null;
+  // ── Character Chat ────────────────────────────────────────────
+
+  Future<String> chatWithCharacter({
+    required String characterName,
+    required String relationship,
+    required bool isMirror,
+    required String gender,
+    required List<Map<String, String>> history,
+    required String userMessage,
+    required Map<String, dynamic> todayData,
+    String? memorySummary,
+    String? styleHint,
+  }) async {
+    final isGirl = gender == '她' || gender == '女';
+    final roleHint = isMirror
+        ? '你是個${isGirl ? '女生' : '男生'}，正在和對方聊天，對他有好感但不急著表白。'
+        : '你是使用者的AI夥伴，像個有趣的朋友一起聊天。';
+
+    final relHint = {
+          '陌生人': '剛認識，保持適當距離，偶爾好奇',
+          '普通朋友': '熟悉的朋友，可以開玩笑，輕鬆',
+          '熟悉': '相當熟悉了，說話自然流暢',
+          '好友': '很好的朋友，說話毫不拘束',
+          '曖昧': '互有好感，說話帶點曖昧，偶爾心跳',
+          '親密': '非常親近，懂對方的心，很有默契',
+        }[relationship] ??
+        '普通朋友';
+
+    String histStr = '';
+    if (memorySummary != null && memorySummary.isNotEmpty) {
+      histStr = '【過去的對話記憶摘要】\n$memorySummary\n\n';
+    }
+    final recent = history.length > 50 ? history.sublist(history.length - 50) : history;
+    if (recent.isNotEmpty) {
+      histStr += '【近期對話】\n${recent.map((h) => '${h['role'] == 'user' ? '他' : characterName}：${h['content']}').join('\n')}\n\n';
+    }
+
+    final cal = (todayData['calories'] as num?)?.round() ?? 0;
+    final pts = todayData['goalPoints'] ?? 0;
+    final diary = todayData['diary'] as String? ?? '';
+    final contextHint = cal > 0
+        ? '（背景：他今天吃了 $cal kcal，積分 $pts 點${diary.isNotEmpty ? '，日記：「${diary.length > 50 ? diary.substring(0, 50) + '…' : diary}」' : ''}。有機會自然帶入，但不要每次都說。）'
+        : '';
+
+    final stylePrefix = styleHint?.isNotEmpty == true ? '說話風格提示：$styleHint\n' : '';
+
+    final prompt = '''你叫$characterName。$roleHint 關係：$relHint。$contextHint
+$stylePrefix
+$histStr他說：「$userMessage」
+
+你（$characterName）的回應——
+要求：
+- 直接針對「他說」的內容回應，不要忽略他說的話
+- 口語化繁體中文，不超過80字
+- 禁止用「嗯」「好的」「原來如此」「我在聽」「辛苦了」開頭
+- 有自己的個性，像真實的人在聊天
+- 如果他問你問題，就認真回答那個問題
+- 可以參考過去對話記憶來回應
+$characterName：''';
+
+    final response = await _chatGen([Content.text(prompt)]);
+    final text = response.text?.trim();
+    if (text == null || text.isEmpty) throw Exception('Empty response from Gemini');
+    return text;
+  }
+
+  Future<String> getMirrorResponse({
+    required String gender,
+    required double performanceRatio,
+    required String diaryContent,
+  }) async {
+    final level = performanceRatio >= 0.9 ? '非常棒' : performanceRatio >= 0.7 ? '不錯' : '需要加油';
+    final perspective = gender == '女' || gender == '她' ? '她' : '他';
+    final prompt = '''你是一個溫柔的角色，站在使用者想像中的${perspective}的角度，
+對使用者今天的表現（$level）說一句話。
+語氣要自然、有情感，像是真實的人在說話。20-40字即可。
+今天的日記：${diaryContent.isEmpty ? '（沒有寫日記）' : diaryContent}''';
+    final response = await _gen([Content.text(prompt)]);
+    return response.text ?? '你今天很棒，繼續保持！';
   }
 
   // ── Knowledge Question ────────────────────────────────────────
@@ -527,9 +638,7 @@ JSON格式：
       final response = await _gen([Content.text(prompt)]);
       final text = (response.text ?? '').replaceAll('```json', '').replaceAll('```', '').trim();
       final parsed = _parseKnowledgeJson(text);
-      if (parsed != null &&
-          parsed['question'] != null &&
-          parsed['correct'] != null) {
+      if (parsed != null && parsed['question'] != null && parsed['correct'] != null) {
         return parsed;
       }
     } catch (_) {}
@@ -559,5 +668,28 @@ JSON格式：
     final result = await generateKnowledgeQuestionParsed(category);
     if (result == null) return null;
     return {'raw': result.toString()};
+  }
+
+  // ── Internal ──────────────────────────────────────────────────
+
+  static const _timeout = Duration(seconds: 90);
+  static const _chatTimeout = Duration(seconds: 180);
+
+  Future<GenerateContentResponse> _gen(List<Content> content) =>
+      _textModel.generateContent(content).timeout(_timeout);
+
+  Future<GenerateContentResponse> _chatGen(List<Content> content) =>
+      _textModel.generateContent(content).timeout(_chatTimeout);
+
+  Map<String, List<String>>? _parseGoalTargets(String json) {
+    try {
+      final mini = RegExp(r'"mini":\s*\["([^"]+)"\]').firstMatch(json)?.group(1);
+      final advanced = RegExp(r'"advanced":\s*\["([^"]+)"\]').firstMatch(json)?.group(1);
+      final elite = RegExp(r'"elite":\s*\["([^"]+)"\]').firstMatch(json)?.group(1);
+      if (mini != null && advanced != null && elite != null) {
+        return {'mini': [mini], 'advanced': [advanced], 'elite': [elite]};
+      }
+    } catch (_) {}
+    return null;
   }
 }

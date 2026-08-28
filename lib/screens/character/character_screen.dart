@@ -8,6 +8,7 @@ import '../../models/character.dart';
 import '../../models/user_profile.dart';
 import '../../models/chat_message.dart';
 import '../shop/shop_screen.dart';
+import '../achievements/achievements_screen.dart';
 
 class CharacterScreen extends StatefulWidget {
   const CharacterScreen({super.key});
@@ -194,6 +195,11 @@ class _CharacterScreenState extends State<CharacterScreen>
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.emoji_events_outlined),
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AchievementsScreen())),
+          ),
+          IconButton(
             icon: const Icon(Icons.shopping_bag_outlined),
             onPressed: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const ShopScreen())),
@@ -304,8 +310,10 @@ class _CharacterScreenState extends State<CharacterScreen>
           Expanded(
             child: Column(
               children: [
+                // EXP progress bar
+                _ExpProgressBar(provider: provider, theme: theme),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
                   child: Row(
                     children: [
                       GestureDetector(
@@ -399,7 +407,9 @@ class _CharacterScreenState extends State<CharacterScreen>
   String _relationshipDesc(String rel) {
     return {
           '陌生人': '剛認識，有些陌生',
-          '朋友': '熟悉的朋友',
+          '普通朋友': '認識了，開始熟悉',
+          '熟悉': '彼此漸漸了解',
+          '好友': '很好的朋友了',
           '曖昧': '彼此有好感',
           '親密': '非常親近的關係',
         }[rel] ??
@@ -424,23 +434,81 @@ class _RelationshipBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = {
-      '陌生人': (Colors.grey.shade600, Colors.grey.shade100),
-      '朋友': (Colors.blue.shade700, Colors.blue.shade50),
-      '曖昧': (Colors.pink.shade600, Colors.pink.shade50),
-      '親密': (Colors.red.shade600, Colors.red.shade50),
+      '陌生人':   (Colors.grey.shade600,  Colors.grey.shade100),
+      '普通朋友': (Colors.blue.shade600,  Colors.blue.shade50),
+      '熟悉':    (Colors.teal.shade600,  Colors.teal.shade50),
+      '好友':    (Colors.green.shade700, Colors.green.shade50),
+      '曖昧':    (Colors.pink.shade600,  Colors.pink.shade50),
+      '親密':    (Colors.red.shade600,   Colors.red.shade50),
     };
     final (fg, bg) = colors[relationship] ??
         (Colors.grey.shade600, Colors.grey.shade100);
-    final icons = {'陌生人': '👤', '朋友': '😊', '曖昧': '💗', '親密': '❤️'};
+    const icons = {
+      '陌生人': '👤', '普通朋友': '😊', '熟悉': '🙂',
+      '好友': '😄', '曖昧': '💗', '親密': '❤️'
+    };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
           color: bg, borderRadius: BorderRadius.circular(12)),
       child: Text(
         '${icons[relationship] ?? ''} $relationship',
-        style: TextStyle(
-            fontSize: 11, color: fg, fontWeight: FontWeight.w600),
+        style: TextStyle(fontSize: 11, color: fg, fontWeight: FontWeight.w600),
       ),
+    );
+  }
+}
+
+// ── EXP Progress Bar ──────────────────────────────────────────────────
+class _ExpProgressBar extends StatelessWidget {
+  final AppProvider provider;
+  final ThemeData theme;
+  const _ExpProgressBar({required this.provider, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = provider.profile;
+    if (profile == null) return const SizedBox.shrink();
+    final exp = profile.characterExp;
+    final current = profile.currentLevelExp;
+    final next = profile.nextRelationshipExpTarget;
+    final ratio = next < 0
+        ? 1.0
+        : current == next
+            ? 1.0
+            : (exp - current) / (next - current);
+    final rel = profile.relationshipLevel;
+    final colors = {
+      '陌生人':   const Color(0xFF9E9E9E),
+      '普通朋友': const Color(0xFF2196F3),
+      '熟悉':    const Color(0xFF009688),
+      '好友':    const Color(0xFF4CAF50),
+      '曖昧':    const Color(0xFFE91E63),
+      '親密':    const Color(0xFFF44336),
+    };
+    final barColor = colors[rel] ?? theme.colorScheme.primary;
+
+    return Container(
+      color: theme.colorScheme.surface,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Column(children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(rel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
+              color: barColor)),
+          Text(next < 0 ? '已達最高' : '$exp / $next EXP',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+        ]),
+        const SizedBox(height: 3),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: ratio.clamp(0.0, 1.0),
+            minHeight: 5,
+            backgroundColor: barColor.withOpacity(0.15),
+            valueColor: AlwaysStoppedAnimation(barColor),
+          ),
+        ),
+      ]),
     );
   }
 }

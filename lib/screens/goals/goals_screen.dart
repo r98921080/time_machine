@@ -755,6 +755,36 @@ class _SubItemTileState extends State<_SubItemTile> {
         date: DateTime.now(),
       ));
       widget.provider.checkAndUpdateStreak();
+      if (context.mounted) {
+        final exp = level == GoalLevel.elite ? 20
+            : level == GoalLevel.advanced ? 10 : 5;
+        final emoji = _levelEmoji(level);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(children: [
+              Text('$emoji ${level.label} 達成！'),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text('+$exp EXP',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+            ]),
+            backgroundColor: level == GoalLevel.elite
+                ? Colors.green.shade700
+                : level == GoalLevel.advanced
+                    ? Colors.orange.shade700
+                    : Colors.blue.shade700,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
     }
   }
 

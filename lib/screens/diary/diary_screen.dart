@@ -17,6 +17,8 @@ class _DiaryScreenState extends State<DiaryScreen> {
   bool _completing = false;
   bool _extracting = false;
   bool _saved = false;
+  bool _generatingTitle = false;
+  String? _aiTitle;
   String? _completeError;
   String? _lastDiaryForCompletion;
 
@@ -25,6 +27,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
     super.initState();
     final provider = context.read<AppProvider>();
     _ctrl = TextEditingController(text: provider.todayDiary?.content ?? '');
+    _aiTitle = provider.todayDiary?.aiTitle;
   }
 
   @override
@@ -56,6 +59,55 @@ class _DiaryScreenState extends State<DiaryScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            // AI Title display
+            if (_aiTitle != null && _aiTitle!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 400),
+                  builder: (_, v, child) => Opacity(opacity: v, child: child),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          theme.colorScheme.primaryContainer,
+                          theme.colorScheme.secondaryContainer,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(children: [
+                      const Text('✨', style: TextStyle(fontSize: 14)),
+                      const SizedBox(width: 6),
+                      Text('「$_aiTitle」',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onPrimaryContainer,
+                              fontStyle: FontStyle.italic)),
+                      const Spacer(),
+                      if (_generatingTitle)
+                        SizedBox(width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2,
+                                color: theme.colorScheme.primary)),
+                    ]),
+                  ),
+                ),
+              )
+            else if (_generatingTitle)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(children: [
+                  const SizedBox(width: 14, height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(width: 8),
+                  Text('AI 生成標題中…',
+                      style: TextStyle(fontSize: 12,
+                          color: theme.colorScheme.onSurfaceVariant)),
+                ]),
+              ),
             Expanded(
               child: TextField(
                 controller: _ctrl,
@@ -197,7 +249,24 @@ class _DiaryScreenState extends State<DiaryScreen> {
     setState(() => _saved = true);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('日記已儲存')));
+          const SnackBar(content: Text('日記已儲存 ✍️')));
+    }
+
+    // Generate AI title in background if content is substantial
+    if (content.length >= 30 && (existing?.aiTitle == null || existing!.aiTitle!.isEmpty)) {
+      setState(() => _generatingTitle = true);
+      try {
+        final title = await provider.generateDiaryTitle(content);
+        if (mounted && title.isNotEmpty) {
+          setState(() => _aiTitle = title);
+          // Save title back to diary
+          await provider.saveDiary(entry.copyWith(aiTitle: title));
+        }
+      } catch (_) {
+        // Silent failure for title generation
+      } finally {
+        if (mounted) setState(() => _generatingTitle = false);
+      }
     }
   }
 }

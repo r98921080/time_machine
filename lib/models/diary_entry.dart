@@ -5,6 +5,7 @@ class DiaryEntry {
   final String profileId;
   String content;
   String? aiCompletion;
+  String? aiTitle;
   String? mood;
   List<String> extractedTodos;
   DateTime date;
@@ -15,6 +16,7 @@ class DiaryEntry {
     required this.profileId,
     required this.content,
     this.aiCompletion,
+    this.aiTitle,
     this.mood,
     List<String>? extractedTodos,
     required this.date,
@@ -28,6 +30,7 @@ class DiaryEntry {
     'profileId': profileId,
     'content': content,
     'aiCompletion': aiCompletion,
+    'aiTitle': aiTitle,
     'mood': mood,
     'extractedTodos': extractedTodos,
     'date': date.toIso8601String(),
@@ -39,10 +42,29 @@ class DiaryEntry {
     profileId: m['profileId'] as String,
     content: m['content'] as String,
     aiCompletion: m['aiCompletion'] as String?,
+    aiTitle: m['aiTitle'] as String?,
     mood: m['mood'] as String?,
     extractedTodos: List<String>.from(m['extractedTodos'] as List? ?? []),
     date: DateTime.parse(m['date'] as String),
     updatedAt: DateTime.parse(m['updatedAt'] as String),
+  );
+
+  DiaryEntry copyWith({
+    String? content,
+    String? aiCompletion,
+    String? aiTitle,
+    String? mood,
+    List<String>? extractedTodos,
+  }) => DiaryEntry(
+    id: id,
+    profileId: profileId,
+    content: content ?? this.content,
+    aiCompletion: aiCompletion ?? this.aiCompletion,
+    aiTitle: aiTitle ?? this.aiTitle,
+    mood: mood ?? this.mood,
+    extractedTodos: extractedTodos ?? this.extractedTodos,
+    date: date,
+    updatedAt: DateTime.now(),
   );
 }
 
@@ -51,6 +73,7 @@ class VlogEntry {
   final String profileId;
   String narrative;
   String? editedNarrative;
+  String? aiTitle;
   final String style;
   final String performanceTag;
   final Map<String, dynamic> stats;
@@ -62,6 +85,7 @@ class VlogEntry {
     required this.profileId,
     required this.narrative,
     this.editedNarrative,
+    this.aiTitle,
     required this.style,
     required this.performanceTag,
     required this.stats,
@@ -70,12 +94,14 @@ class VlogEntry {
   }) : photoPaths = photoPaths ?? [];
 
   String get displayNarrative => editedNarrative?.isNotEmpty == true ? editedNarrative! : narrative;
+  String get displayTitle => aiTitle?.isNotEmpty == true ? aiTitle! : '今日記錄';
 
   Map<String, dynamic> toMap() => {
     'id': id,
     'profileId': profileId,
     'narrative': narrative,
     'editedNarrative': editedNarrative,
+    'aiTitle': aiTitle,
     'style': style,
     'performanceTag': performanceTag,
     'stats': stats,
@@ -88,6 +114,7 @@ class VlogEntry {
     profileId: m['profileId'] as String,
     narrative: m['narrative'] as String,
     editedNarrative: m['editedNarrative'] as String?,
+    aiTitle: m['aiTitle'] as String?,
     style: m['style'] as String,
     performanceTag: m['performanceTag'] as String,
     stats: Map<String, dynamic>.from(m['stats'] as Map),
@@ -95,16 +122,85 @@ class VlogEntry {
     photoPaths: List<String>.from(m['photoPaths'] as List? ?? []),
   );
 
-  VlogEntry copyWith({String? editedNarrative, List<String>? photoPaths}) => VlogEntry(
+  VlogEntry copyWith({
+    String? editedNarrative,
+    List<String>? photoPaths,
+    String? aiTitle,
+  }) => VlogEntry(
     id: id,
     profileId: profileId,
     narrative: narrative,
     editedNarrative: editedNarrative ?? this.editedNarrative,
+    aiTitle: aiTitle ?? this.aiTitle,
     style: style,
     performanceTag: performanceTag,
     stats: stats,
     date: date,
     photoPaths: photoPaths ?? this.photoPaths,
+  );
+}
+
+class MoodEntry {
+  final String id;
+  final String profileId;
+  final DateTime date;
+  final int score; // 1-5
+  final String emoji;
+  final String? note;
+
+  MoodEntry({
+    String? id,
+    required this.profileId,
+    required this.date,
+    required this.score,
+    required this.emoji,
+    this.note,
+  }) : id = id ?? const Uuid().v4();
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'profileId': profileId,
+    'date': date.toIso8601String(),
+    'score': score,
+    'emoji': emoji,
+    'note': note,
+  };
+
+  factory MoodEntry.fromMap(Map<String, dynamic> m) => MoodEntry(
+    id: m['id'] as String?,
+    profileId: m['profileId'] as String,
+    date: DateTime.parse(m['date'] as String),
+    score: m['score'] as int,
+    emoji: m['emoji'] as String,
+    note: m['note'] as String?,
+  );
+}
+
+class EnergyEntry {
+  final String id;
+  final String profileId;
+  final DateTime date;
+  final int score; // 1-10
+
+  EnergyEntry({
+    String? id,
+    required this.profileId,
+    required this.date,
+    required this.score,
+  }) : id = id ?? const Uuid().v4();
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'profileId': profileId,
+    'date': date.toIso8601String(),
+    'score': score,
+  };
+
+  factory EnergyEntry.fromMap(Map<String, dynamic> m) => EnergyEntry(
+    id: m['id'] as String?,
+    profileId: m['profileId'] as String,
+    date: DateTime.parse(m['date'] as String),
+    score: m['score'] as int,
   );
 }
 

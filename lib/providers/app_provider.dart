@@ -10,6 +10,7 @@ import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/todo_item.dart';
 import '../models/bonus_challenge.dart';
+import '../models/achievement.dart';
 import '../services/database_service.dart';
 import '../services/gemini_service.dart';
 import '../services/openai_service.dart';
@@ -56,6 +57,13 @@ class AppProvider extends ChangeNotifier {
   List<TodoItem> _todos = [];
   List<BonusChallenge> _bonusChallenges = [];
 
+  List<Achievement> _achievements = [];
+  MoodEntry? _todayMood;
+  EnergyEntry? _todayEnergy;
+  int _waterMl = 0;
+  bool _loginRewardPending = false;
+  String? _proactiveMessage;
+
   bool _sendingMessage = false;
   bool _chatting = false;
 
@@ -71,6 +79,12 @@ class AppProvider extends ChangeNotifier {
   List<Map<String, dynamic>> get cachedKnowledge => _cachedKnowledge;
   List<TodoItem> get todos => _todos;
   List<BonusChallenge> get bonusChallenges => _bonusChallenges;
+  List<Achievement> get achievements => _achievements;
+  MoodEntry? get todayMood => _todayMood;
+  EnergyEntry? get todayEnergy => _todayEnergy;
+  int get waterMl => _waterMl;
+  bool get loginRewardPending => _loginRewardPending;
+  String? get proactiveMessage => _proactiveMessage;
 
   String get characterName {
     final stored = _profile?.characterName;
@@ -119,18 +133,60 @@ class AppProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _apiKey = prefs.getString(_kApiKey);
     _openAIKey = prefs.getString(_kOpenAIKey);
-    _relationship = prefs.getString(_kRelationshipKey) ?? '陌生人';
     _profile = await DatabaseService.getFirstProfile();
     if (_profile == null) {
       _state = AppState.onboarding;
     } else {
+      // Derive relationship from characterExp (EXP-based system)
+      _relationship = _profile!.relationshipLevel;
+
       await _loadTodayData();
+      await _handleLoginStreak();
       _state = AppState.ready;
       _preCacheKnowledgeIfNeeded(prefs);
       _ensureBonusChallengesForToday();
       _ensureVlogAfterNoon();
+      _maybeGenerateProactiveMessage();
     }
     notifyListeners();
+  }
+
+  Future<void> _handleLoginStreak() async {
+    if (_profile == null) return;
+    final today = DateTime.now();
+    final last = _profile!.lastLogDate;
+    int newStreak = _profile!.loginStreak;
+    bool reward = false;
+
+    if (last == null) {
+      newStreak = 1;
+      reward = true;
+    } else if (_isSameDay(last, today)) {
+      return; // already counted today
+    } else {
+      final diff = DateTime(today.year, today.month, today.day)
+          .difference(DateTime(last.year, last.month, last.day)).inDays;
+      if (diff == 1) {
+        newStreak++;
+        reward = true;
+      } else if (diff > 1) {
+        newStreak = 1;
+        reward = true;
+      }
+    }
+
+    final updated = _profile!.copyWith(
+      loginStreak: newStreak,
+      lastLogDate: today,
+    );
+    await DatabaseService.saveProfile(updated);
+    _profile = updated;
+    if (reward) {
+      _loginRewardPending = true;
+      // Streak bonus EXP
+      final expBonus = (newStreak % 7 == 0) ? 30 : 5;
+      await _addCharacterExp(expBonus);
+    }
   }
 
   void _ensureVlogAfterNoon() {
@@ -160,6 +216,10 @@ class AppProvider extends ChangeNotifier {
     _todos = await DatabaseService.getTodos(_profile!.id);
     final dateStr = _dateKey(today);
     _bonusChallenges = await DatabaseService.getBonusChallenges(_profile!.id, dateStr);
+    _achievements = await DatabaseService.getAchievements(_profile!.id);
+    _todayMood = await DatabaseService.getMoodForDay(_profile!.id, today);
+    _todayEnergy = await DatabaseService.getEnergyForDay(_profile!.id, today);
+    _waterMl = await DatabaseService.getWaterForDay(_profile!.id, today);
     notifyListeners();
   }
 
@@ -338,10 +398,33 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> logGoal(DailyGoalLog log) async {
     await DatabaseService.insertGoalLog(log);
-    _todayLogs = await DatabaseService.getLogsForDay(
-        _profile!.id, DateTime.now());
+    _todayLogs = await DatabaseService.getLogsForDay(_profile!.id, DateTime.now());
     await _addGrowthPoints(log.achieved.points * 10);
+    // EXP for character relationship
+    final expGain = log.achieved == GoalLevel.elite ? 20 : log.achieved == GoalLevel.advanced ? 10 : 5;
+    await _addCharacterExp(expGain);
+    // Random 5% bonus points
+    if ((DateTime.now().millisecondsSinceEpoch % 20) == 0) {
+      await _addGrowthPoints(50);
+    }
+    // Achievement checks
+    await _checkGoalAchievements(log.achieved);
     notifyListeners();
+  }
+
+  Future<void> _checkGoalAchievements(GoalLevel level) async {
+    if (_profile == null) return;
+    // First elite
+    if (level == GoalLevel.elite) {
+      await _unlockIfNew('goal_elite');
+    }
+    // Count total goals
+    final heatmap = await DatabaseService.getGoalHeatmapData(_profile!.id, 9999);
+    final total = heatmap.values.fold(0, (s, v) => s + v);
+    if (total >= 10) await _unlockIfNew('goal_10');
+    if (total >= 50) await _unlockIfNew('goal_50');
+    // First record ever
+    if (total >= 1) await _unlockIfNew('first_record');
   }
 
   Future<void> removeGoalLog(String subItemId, GoalLevel level) async {
@@ -479,6 +562,8 @@ class AppProvider extends ChangeNotifier {
       muscleLevel: character.muscleLevel,
       fatLevel: character.fatLevel,
       outfitId: character.outfitId,
+      accessories: character.accessories,
+      tattoos: character.tattoos,
     );
   }
 
@@ -593,13 +678,17 @@ class AppProvider extends ChangeNotifier {
       GoalCategory category, GoalSubItem item) async {
     if (_gemini == null) return [];
     final catTitle = category.title.replaceAll(RegExp(r'[^一-鿿㐀-䶿\w\s]'), '').trim();
-    // Compute achievement rate for this sub-item
-    final allLogs = await DatabaseService.getLogsForDay(_profile!.id, DateTime.now());
-    final subLogs = allLogs.where((l) => l.subItemId == item.id).toList();
-    final rate = subLogs.isNotEmpty ? subLogs.length / 3.0 : 0.0;
+    final heatmap = await DatabaseService.getGoalHeatmapData(_profile!.id, 30);
+    final total = heatmap.values.fold(0, (s, v) => s + v);
+    final possible = heatmap.length * 3;
+    final rate = possible > 0 ? total / possible : 0.0;
     return _gemini!.generateGoalRebuildOptions(
       category: catTitle,
       subCategory: item.name,
+      subItemName: item.name,
+      subItemMini: item.miniTarget ?? '入門目標',
+      subItemAdvanced: item.advancedTarget ?? '進階目標',
+      subItemElite: item.eliteTarget ?? '精英目標',
       diaryContent: _todayDiary?.content,
       achievementRate: rate.clamp(0.0, 1.0),
     );
@@ -719,6 +808,7 @@ class AppProvider extends ChangeNotifier {
 
       final isMirror = _profile!.characterMode == CharacterMode.mirror;
 
+      final styleHint = _buildStyleHint();
       final reply = await _gemini!.chatWithCharacter(
         characterName: characterName,
         relationship: _relationship,
@@ -733,6 +823,7 @@ class AppProvider extends ChangeNotifier {
           'diary': _todayDiary?.content ?? '',
         },
         memorySummary: memorySummary,
+        styleHint: styleHint,
       );
 
       final charMsg = CharacterChatMessage(
@@ -742,6 +833,12 @@ class AppProvider extends ChangeNotifier {
       );
       _chatHistory.add(charMsg);
       await DatabaseService.saveChatMessage(charMsg);
+
+      // EXP per chat message (diminishing: capped at 2 per day in spirit)
+      await _addCharacterExp(3);
+      // Achievement: chat 10 times
+      final chatCount = await DatabaseService.getChatMessageCount(_profile!.id);
+      if (chatCount >= 10) await _unlockIfNew('chat_10');
 
       await _updateRelationship();
 
@@ -783,21 +880,14 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> _updateRelationship() async {
-    final count = await DatabaseService.getChatMessageCount(_profile!.id);
-    String newRel;
-    if (count < 20) {
-      newRel = '陌生人';
-    } else if (count < 60) {
-      newRel = '朋友';
-    } else if (count < 150) {
-      newRel = '曖昧';
-    } else {
-      newRel = '親密';
-    }
+    if (_profile == null) return;
+    final newRel = _profile!.relationshipLevel;
     if (newRel != _relationship) {
+      final oldRel = _relationship;
       _relationship = newRel;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kRelationshipKey, _relationship);
+      // Achievement: first relationship level-up
+      if (oldRel == '陌生人') await _unlockIfNew('relationship_up');
+      if (newRel == '親密') await _unlockIfNew('relationship_intimate');
       notifyListeners();
     }
   }
@@ -897,6 +987,189 @@ class AppProvider extends ChangeNotifier {
     await DatabaseService.saveProfile(updated);
     _profile = updated;
     notifyListeners();
+  }
+
+  // ── CharacterExp & Achievements ───────────────────────────────
+
+  Future<void> _addCharacterExp(int exp) async {
+    if (_profile == null) return;
+    final updated = _profile!.copyWith(characterExp: _profile!.characterExp + exp);
+    await DatabaseService.saveProfile(updated);
+    _profile = updated;
+    _relationship = updated.relationshipLevel;
+    notifyListeners();
+  }
+
+  Future<void> _unlockIfNew(String key) async {
+    if (_profile == null) return;
+    if (_achievements.any((a) => a.key == key)) return;
+    final already = await DatabaseService.hasAchievement(_profile!.id, key);
+    if (already) return;
+    final a = Achievement(profileId: _profile!.id, key: key, unlockedAt: DateTime.now());
+    await DatabaseService.unlockAchievement(a);
+    _achievements.add(a);
+  }
+
+  // ── Equipment style hint ──────────────────────────────────────
+
+  String? _buildStyleHint() {
+    final acc = _character?.accessories ?? [];
+    final parts = <String>[];
+    if (acc.contains('round_glasses')) parts.add('說話帶點書卷氣，引用一些知識或名言很自然');
+    if (acc.contains('sunglasses')) parts.add('說話酷酷的，不輕易表露情感，偶爾霸道');
+    if (acc.contains('cap')) parts.add('說話隨性，喜歡用運動或戶外相關的比喻');
+    if (acc.contains('scarf')) parts.add('說話溫柔細膩，帶點詩意，喜歡描述感受');
+    return parts.isEmpty ? null : parts.join('；');
+  }
+
+  // ── Mood & Energy ─────────────────────────────────────────────
+
+  Future<void> saveMoodEntry(MoodEntry entry) async {
+    if (_profile == null) return;
+    await DatabaseService.saveMood(entry);
+    _todayMood = entry;
+    // Achievement: 7-day mood streak
+    final history = await DatabaseService.getMoodHistory(_profile!.id, 7);
+    if (history.length >= 7) await _unlockIfNew('mood_check_7');
+    notifyListeners();
+  }
+
+  Future<void> saveEnergyEntry(EnergyEntry entry) async {
+    if (_profile == null) return;
+    await DatabaseService.saveEnergy(entry);
+    _todayEnergy = entry;
+    if (entry.score >= 9) await _unlockIfNew('energy_high');
+    notifyListeners();
+  }
+
+  // ── Water ─────────────────────────────────────────────────────
+
+  Future<void> addWaterMl(int ml) async {
+    if (_profile == null) return;
+    final id = '${_profile!.id}_${DateTime.now().millisecondsSinceEpoch}';
+    await DatabaseService.addWater(id, _profile!.id, DateTime.now(), ml);
+    _waterMl += ml;
+    notifyListeners();
+  }
+
+  Future<void> resetWater() async {
+    if (_profile == null) return;
+    await DatabaseService.resetWaterForDay(_profile!.id, DateTime.now());
+    _waterMl = 0;
+    notifyListeners();
+  }
+
+  // ── Morning Intent ────────────────────────────────────────────
+
+  Future<void> saveMorningIntent(String intent) async {
+    if (_profile == null) return;
+    final today = DateTime.now();
+    await DatabaseService.saveMorningIntent(_profile!.id, today, intent);
+    final updated = _profile!.copyWith(
+      morningIntent: intent,
+      lastMorningIntentDate: _dateKey(today),
+    );
+    await DatabaseService.saveProfile(updated);
+    _profile = updated;
+    final streak = await DatabaseService.getMorningIntentStreak(_profile!.id);
+    if (streak >= 7) await _unlockIfNew('morning_intent_7');
+    notifyListeners();
+  }
+
+  void dismissLoginReward() {
+    _loginRewardPending = false;
+    notifyListeners();
+  }
+
+  void clearProactiveMessage() {
+    _proactiveMessage = null;
+    notifyListeners();
+  }
+
+  // ── Deep Analysis ─────────────────────────────────────────────
+
+  Future<Map<String, String>> performDeepLifeAnalysis() async {
+    if (_gemini == null || _profile == null) {
+      return {'emotions': '請設定 API Key 後再試。', 'balance': '', 'advice': '', 'goalInsight': '', 'growth': ''};
+    }
+    await _unlockIfNew('explore_first');
+    final catNames = _categories.map((c) => c.title).toList();
+    final recentLogs = await DatabaseService.getLogsForDay(_profile!.id, DateTime.now());
+    return _gemini!.performDeepLifeAnalysis(
+      categories: catNames,
+      recentLogs: recentLogs.map((l) => l.toMap()).toList(),
+      diaryContent: _todayDiary?.content,
+      moodScore: _todayMood?.score,
+      energyScore: _todayEnergy?.score,
+      nickname: _profile!.nickname,
+    );
+  }
+
+  Future<String> generateMoodCorrelation() async {
+    if (_gemini == null || _profile == null) return '持續記錄，AI 將發現你的規律。';
+    final moods = await DatabaseService.getMoodHistory(_profile!.id, 7);
+    final goalData = await DatabaseService.getWeeklyGoalCompletion(_profile!.id);
+    return _gemini!.generateMoodCorrelation(
+      weekMoods: moods.map((m) => {'date': _dateKey(m.date), 'score': m.score}).toList(),
+      weekGoals: goalData,
+    );
+  }
+
+  // ── Proactive Character Message ────────────────────────────────
+
+  Future<void> _maybeGenerateProactiveMessage() async {
+    if (_profile == null || _gemini == null) return;
+    final today = DateTime.now();
+    final last = _profile!.lastProactiveDate;
+    if (last != null && _isSameDay(last, today)) return;
+    if (today.hour < 9 || today.hour > 22) return;
+
+    final target = _profile!.calculatedCalorieTarget;
+    final ratio = target > 0 ? todayCalories / target : 0.0;
+    final styleHint = _buildStyleHint();
+
+    try {
+      final msg = await _gemini!.generateCharacterProactiveMessage(
+        characterName: characterName,
+        relationship: _relationship,
+        nickname: _profile!.nickname,
+        caloriesRatio: ratio,
+        goalPoints: todayGoalPoints,
+        loginStreak: _profile!.loginStreak,
+        diaryContent: _todayDiary?.content,
+        gender: _profile!.mirrorGender ?? _profile!.sex,
+        styleHint: styleHint,
+      );
+      _proactiveMessage = msg;
+      final updated = _profile!.copyWith(lastProactiveDate: today);
+      await DatabaseService.saveProfile(updated);
+      _profile = updated;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  // ── Diary Title ───────────────────────────────────────────────
+
+  Future<String> generateDiaryTitle(String content) async {
+    if (_gemini == null) return '今日記錄';
+    return _gemini!.generateDiaryTitle(content);
+  }
+
+  // ── Heatmap (3-month) ─────────────────────────────────────────
+
+  Future<Map<String, int>> getHeatmap3Months() async {
+    if (_profile == null) return {};
+    return DatabaseService.getGoalHeatmapData(_profile!.id, 91);
+  }
+
+  // ── Year Ago ──────────────────────────────────────────────────
+
+  Future<VlogEntry?> getVlogOneYearAgo() async {
+    if (_profile == null) return null;
+    final yearAgo = DateTime.now().subtract(const Duration(days: 365));
+    final entry = await DatabaseService.getVlogForDay(_profile!.id, yearAgo);
+    if (entry != null) await _unlockIfNew('year_memory');
+    return entry;
   }
 
   // ── Streak ────────────────────────────────────────────────────

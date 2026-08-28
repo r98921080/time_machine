@@ -9,6 +9,7 @@ import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/todo_item.dart';
 import '../models/bonus_challenge.dart';
+import '../models/achievement.dart';
 
 class DatabaseService {
   static Database? _db;
@@ -20,7 +21,7 @@ class DatabaseService {
 
   static Future<Database> _open() async {
     final path = join(await getDatabasesPath(), 'time_machine.db');
-    return openDatabase(path, version: 3, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    return openDatabase(path, version: 4, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -68,6 +69,50 @@ class DatabaseService {
           done INTEGER NOT NULL DEFAULT 0,
           points INTEGER NOT NULL DEFAULT 10,
           doneAt TEXT
+        )
+      ''');
+    }
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS achievements (
+          id TEXT PRIMARY KEY,
+          profileId TEXT NOT NULL,
+          key TEXT NOT NULL,
+          unlockedAt TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS mood_entries (
+          id TEXT PRIMARY KEY,
+          profileId TEXT NOT NULL,
+          date TEXT NOT NULL,
+          score INTEGER NOT NULL,
+          emoji TEXT NOT NULL,
+          note TEXT
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS energy_entries (
+          id TEXT PRIMARY KEY,
+          profileId TEXT NOT NULL,
+          date TEXT NOT NULL,
+          score INTEGER NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS morning_intents (
+          id TEXT PRIMARY KEY,
+          profileId TEXT NOT NULL,
+          date TEXT NOT NULL,
+          intent TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS water_entries (
+          id TEXT PRIMARY KEY,
+          profileId TEXT NOT NULL,
+          date TEXT NOT NULL,
+          ml INTEGER NOT NULL
         )
       ''');
     }
@@ -180,6 +225,48 @@ class DatabaseService {
         done INTEGER NOT NULL DEFAULT 0,
         points INTEGER NOT NULL DEFAULT 10,
         doneAt TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE achievements (
+        id TEXT PRIMARY KEY,
+        profileId TEXT NOT NULL,
+        key TEXT NOT NULL,
+        unlockedAt TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE mood_entries (
+        id TEXT PRIMARY KEY,
+        profileId TEXT NOT NULL,
+        date TEXT NOT NULL,
+        score INTEGER NOT NULL,
+        emoji TEXT NOT NULL,
+        note TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE energy_entries (
+        id TEXT PRIMARY KEY,
+        profileId TEXT NOT NULL,
+        date TEXT NOT NULL,
+        score INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE morning_intents (
+        id TEXT PRIMARY KEY,
+        profileId TEXT NOT NULL,
+        date TEXT NOT NULL,
+        intent TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE water_entries (
+        id TEXT PRIMARY KEY,
+        profileId TEXT NOT NULL,
+        date TEXT NOT NULL,
+        ml INTEGER NOT NULL
       )
     ''');
   }
@@ -631,5 +718,160 @@ class DatabaseService {
     await d.update('bonus_challenges',
         {'done': 1, 'doneAt': DateTime.now().toIso8601String()},
         where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ── Achievements ──────────────────────────────────────────────
+
+  static Future<List<Achievement>> getAchievements(String profileId) async {
+    final d = await db;
+    final rows = await d.query('achievements',
+        where: 'profileId = ?', whereArgs: [profileId],
+        orderBy: 'unlockedAt ASC');
+    return rows.map((r) => Achievement.fromMap(Map<String, dynamic>.from(r))).toList();
+  }
+
+  static Future<bool> hasAchievement(String profileId, String key) async {
+    final d = await db;
+    final rows = await d.query('achievements',
+        where: 'profileId = ? AND key = ?', whereArgs: [profileId, key], limit: 1);
+    return rows.isNotEmpty;
+  }
+
+  static Future<void> unlockAchievement(Achievement a) async {
+    final d = await db;
+    await d.insert('achievements', a.toMap(), conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  // ── Mood ──────────────────────────────────────────────────────
+
+  static Future<MoodEntry?> getMoodForDay(String profileId, DateTime day) async {
+    final d = await db;
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    final rows = await d.query('mood_entries',
+        where: 'profileId = ? AND date >= ? AND date < ?',
+        whereArgs: [profileId, start.toIso8601String(), end.toIso8601String()],
+        limit: 1);
+    if (rows.isEmpty) return null;
+    return MoodEntry.fromMap(Map<String, dynamic>.from(rows.first));
+  }
+
+  static Future<void> saveMood(MoodEntry e) async {
+    final d = await db;
+    final start = DateTime(e.date.year, e.date.month, e.date.day);
+    final end = start.add(const Duration(days: 1));
+    await d.delete('mood_entries',
+        where: 'profileId = ? AND date >= ? AND date < ?',
+        whereArgs: [e.profileId, start.toIso8601String(), end.toIso8601String()]);
+    await d.insert('mood_entries', e.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<List<MoodEntry>> getMoodHistory(String profileId, int days) async {
+    final d = await db;
+    final since = DateTime.now().subtract(Duration(days: days));
+    final rows = await d.query('mood_entries',
+        where: 'profileId = ? AND date >= ?',
+        whereArgs: [profileId, since.toIso8601String()],
+        orderBy: 'date DESC');
+    return rows.map((r) => MoodEntry.fromMap(Map<String, dynamic>.from(r))).toList();
+  }
+
+  // ── Energy ────────────────────────────────────────────────────
+
+  static Future<EnergyEntry?> getEnergyForDay(String profileId, DateTime day) async {
+    final d = await db;
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    final rows = await d.query('energy_entries',
+        where: 'profileId = ? AND date >= ? AND date < ?',
+        whereArgs: [profileId, start.toIso8601String(), end.toIso8601String()],
+        limit: 1);
+    if (rows.isEmpty) return null;
+    return EnergyEntry.fromMap(Map<String, dynamic>.from(rows.first));
+  }
+
+  static Future<void> saveEnergy(EnergyEntry e) async {
+    final d = await db;
+    final start = DateTime(e.date.year, e.date.month, e.date.day);
+    final end = start.add(const Duration(days: 1));
+    await d.delete('energy_entries',
+        where: 'profileId = ? AND date >= ? AND date < ?',
+        whereArgs: [e.profileId, start.toIso8601String(), end.toIso8601String()]);
+    await d.insert('energy_entries', e.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  // ── Morning Intent ────────────────────────────────────────────
+
+  static Future<String?> getMorningIntentForDay(String profileId, DateTime day) async {
+    final d = await db;
+    final dateStr = '${day.year}-${day.month.toString().padLeft(2,'0')}-${day.day.toString().padLeft(2,'0')}';
+    final rows = await d.query('morning_intents',
+        where: 'profileId = ? AND date = ?', whereArgs: [profileId, dateStr], limit: 1);
+    if (rows.isEmpty) return null;
+    return rows.first['intent'] as String?;
+  }
+
+  static Future<void> saveMorningIntent(String profileId, DateTime day, String intent) async {
+    final d = await db;
+    final dateStr = '${day.year}-${day.month.toString().padLeft(2,'0')}-${day.day.toString().padLeft(2,'0')}';
+    final id = '${profileId}_$dateStr';
+    await d.insert('morning_intents',
+        {'id': id, 'profileId': profileId, 'date': dateStr, 'intent': intent},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<int> getMorningIntentStreak(String profileId) async {
+    final d = await db;
+    final rows = await d.query('morning_intents',
+        where: 'profileId = ?', whereArgs: [profileId],
+        orderBy: 'date DESC', limit: 30);
+    if (rows.isEmpty) return 0;
+    int streak = 0;
+    DateTime check = DateTime.now();
+    for (final r in rows) {
+      final dateStr = r['date'] as String;
+      final parts = dateStr.split('-');
+      final d2 = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+      final diff = DateTime(check.year, check.month, check.day)
+          .difference(DateTime(d2.year, d2.month, d2.day)).inDays;
+      if (diff <= 1) {
+        streak++;
+        check = d2;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
+  // ── Water ─────────────────────────────────────────────────────
+
+  static Future<int> getWaterForDay(String profileId, DateTime day) async {
+    final d = await db;
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    final rows = await d.rawQuery(
+        'SELECT SUM(ml) as total FROM water_entries WHERE profileId = ? AND date >= ? AND date < ?',
+        [profileId, start.toIso8601String(), end.toIso8601String()]);
+    return (rows.first['total'] as int?) ?? 0;
+  }
+
+  static Future<void> addWater(String id, String profileId, DateTime day, int ml) async {
+    final d = await db;
+    await d.insert('water_entries', {
+      'id': id,
+      'profileId': profileId,
+      'date': day.toIso8601String(),
+      'ml': ml,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> resetWaterForDay(String profileId, DateTime day) async {
+    final d = await db;
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    await d.delete('water_entries',
+        where: 'profileId = ? AND date >= ? AND date < ?',
+        whereArgs: [profileId, start.toIso8601String(), end.toIso8601String()]);
   }
 }
