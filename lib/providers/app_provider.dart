@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,15 +7,28 @@ import '../models/meal.dart';
 import '../models/goal.dart';
 import '../models/diary_entry.dart';
 import '../models/character.dart';
+import '../models/chat_message.dart';
 import '../services/database_service.dart';
 import '../services/gemini_service.dart';
 import '../services/openai_service.dart';
 
 const _kApiKey = 'gemini_api_key';
 const _kOpenAIKey = 'openai_api_key';
-// Keys injected at build time via --dart-define (see GitHub Actions workflow)
-const _kDefaultApiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
-const _kDefaultOpenAIKey = String.fromEnvironment('OPENAI_API_KEY', defaultValue: '');
+const _kRelationshipKey = 'character_relationship';
+const _kKnowledgeDateKey = 'knowledge_cache_date';
+
+// Default keys injected at build time via --dart-define (see .github/workflows/build.yml)
+// Never hardcode API keys in source — set GEMINI_API_KEY in GitHub Secrets
+const _kDefaultGeminiKey =
+    String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
+const _kDefaultOpenAIKey =
+    String.fromEnvironment('OPENAI_API_KEY', defaultValue: '');
+
+const _kKnowledgeCategories = [
+  '自然科學', '歷史冷知識', '人體秘密', '食物真相', '動物奇聞',
+  '太空宇宙', '心理學', '數學趣味', '古文明', '科技發明',
+  '藝術音樂', '地理文化', '語言文字', '運動趣聞', '台灣文化',
+];
 
 enum AppState { loading, onboarding, ready }
 
@@ -24,6 +38,7 @@ class AppProvider extends ChangeNotifier {
   CharacterAppearance? _character;
   String? _apiKey;
   String? _openAIKey;
+  String _relationship = '陌生人';
 
   List<Meal> _todayMeals = [];
   List<GoalCategory> _categories = [];
@@ -32,9 +47,11 @@ class AppProvider extends ChangeNotifier {
   VlogEntry? _todayVlog;
   List<VlogEntry> _recentVlogs = [];
   Set<String> _ownedItems = {};
+  List<CharacterChatMessage> _chatHistory = [];
+  List<Map<String, dynamic>> _cachedKnowledge = [];
 
   bool _sendingMessage = false;
-  String? _lastChatResponse;
+  bool _chatting = false;
 
   AppState get state => _state;
   UserProfile? get profile => _profile;
@@ -42,6 +59,10 @@ class AppProvider extends ChangeNotifier {
   String? get apiKey => _apiKey;
   String? get openAIKey => _openAIKey;
   Set<String> get ownedItems => _ownedItems;
+  String get relationship => _relationship;
+  List<CharacterChatMessage> get chatHistory => _chatHistory;
+  bool get chatting => _chatting;
+  List<Map<String, dynamic>> get cachedKnowledge => _cachedKnowledge;
 
   OpenAIService? get openAI {
     final key = _openAIKey ?? _kDefaultOpenAIKey;
@@ -57,7 +78,6 @@ class AppProvider extends ChangeNotifier {
   List<VlogEntry> get recentVlogs => _recentVlogs;
 
   bool get sendingMessage => _sendingMessage;
-  String? get lastChatResponse => _lastChatResponse;
 
   double get todayCalories =>
       _todayMeals.fold(0, (s, m) => s + m.totalCalories);
@@ -72,7 +92,7 @@ class AppProvider extends ChangeNotifier {
       _todayLogs.fold(0, (s, l) => s + l.achieved.points);
 
   GeminiService? get _gemini {
-    final key = _apiKey ?? _kDefaultApiKey;
+    final key = _apiKey ?? _kDefaultGeminiKey;
     if (key.isEmpty) return null;
     return GeminiService(key);
   }
@@ -81,12 +101,15 @@ class AppProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _apiKey = prefs.getString(_kApiKey);
     _openAIKey = prefs.getString(_kOpenAIKey);
+    _relationship = prefs.getString(_kRelationshipKey) ?? '陌生人';
     _profile = await DatabaseService.getFirstProfile();
     if (_profile == null) {
       _state = AppState.onboarding;
     } else {
       await _loadTodayData();
       _state = AppState.ready;
+      // Pre-cache knowledge in background
+      _preCacheKnowledgeIfNeeded(prefs);
     }
     notifyListeners();
   }
@@ -102,6 +125,7 @@ class AppProvider extends ChangeNotifier {
     _character ??= CharacterAppearance(gender: _profile!.mirrorGender);
     _ownedItems = await DatabaseService.getOwnedItems(_profile!.id);
     _recentVlogs = await DatabaseService.getRecentVlogs(_profile!.id, 30);
+    _chatHistory = await DatabaseService.getChatHistory(_profile!.id);
     _todayVlog = _recentVlogs.isNotEmpty &&
             _isSameDay(_recentVlogs.first.date, today)
         ? _recentVlogs.first
@@ -175,9 +199,7 @@ class AppProvider extends ChangeNotifier {
     _sendingMessage = true;
     notifyListeners();
     try {
-      final response = await _gemini!.analyzeFood(text);
-      _lastChatResponse = response;
-      return response;
+      return await _gemini!.analyzeFood(text);
     } finally {
       _sendingMessage = false;
       notifyListeners();
@@ -189,9 +211,7 @@ class AppProvider extends ChangeNotifier {
     _sendingMessage = true;
     notifyListeners();
     try {
-      final response = await _gemini!.analyzeFoodImage(bytes, note);
-      _lastChatResponse = response;
-      return response;
+      return await _gemini!.analyzeFoodImage(bytes, note);
     } finally {
       _sendingMessage = false;
       notifyListeners();
@@ -237,8 +257,15 @@ class AppProvider extends ChangeNotifier {
     await DatabaseService.insertGoalLog(log);
     _todayLogs = await DatabaseService.getLogsForDay(
         _profile!.id, DateTime.now());
-    // Award growth points
     await _addGrowthPoints(log.achieved.points * 10);
+    notifyListeners();
+  }
+
+  Future<void> removeGoalLog(String subItemId, GoalLevel level) async {
+    await DatabaseService.deleteGoalLog(
+        _profile!.id, subItemId, level, DateTime.now());
+    _todayLogs = await DatabaseService.getLogsForDay(
+        _profile!.id, DateTime.now());
     notifyListeners();
   }
 
@@ -262,7 +289,8 @@ class AppProvider extends ChangeNotifier {
 
   // ── Vlog ─────────────────────────────────────────────────────
 
-  Future<void> generateTodayVlog() async {
+  Future<bool> generateTodayVlog() async {
+    if (_gemini == null) return false;
     final target = _profile!.calculatedCalorieTarget;
     final ratio = target > 0 ? todayCalories / target : 0.0;
     final level = ratio >= 0.8 && ratio <= 1.1
@@ -270,7 +298,6 @@ class AppProvider extends ChangeNotifier {
         : ratio > 1.1
             ? '超標'
             : '低落';
-    if (_gemini == null) return;
     final narrative = await _gemini!.generateVlog(
       nickname: _profile!.nickname,
       calories: todayCalories,
@@ -297,6 +324,7 @@ class AppProvider extends ChangeNotifier {
     _todayVlog = vlog;
     _recentVlogs.insert(0, vlog);
     notifyListeners();
+    return true;
   }
 
   // ── Character & Shop ─────────────────────────────────────────
@@ -323,7 +351,6 @@ class AppProvider extends ChangeNotifier {
       case 'outfit':
         updated = _character!.copyWith(outfitId: itemId);
       case 'hair':
-        // Extract hair style and color from item id, e.g. hair_bob_black
         final parts = itemId.split('_');
         final style = parts.length > 1 ? parts[1] : null;
         final color = parts.length > 2 ? parts[2] : null;
@@ -358,40 +385,14 @@ class AppProvider extends ChangeNotifier {
     CharacterAppearance updated;
     switch (cat) {
       case 'outfit':
-        updated = CharacterAppearance(
-          skinTone: _character!.skinTone,
-          hairStyle: _character!.hairStyle,
-          hairColor: _character!.hairColor,
-          faceShape: _character!.faceShape,
-          outfitId: null,
-          backgroundId: _character!.backgroundId,
-          accessories: _character!.accessories,
-          tattoos: _character!.tattoos,
-          bodyType: _character!.bodyType,
-          muscleLevel: _character!.muscleLevel,
-          fatLevel: _character!.fatLevel,
-          gender: _character!.gender,
-        );
+        updated = _character!.copyWith(outfitId: null);
       case 'acc':
       case 'face':
         final current = List<String>.from(_character!.accessories)
           ..remove(itemId);
         updated = _character!.copyWith(accessories: current);
       case 'bg':
-        updated = CharacterAppearance(
-          skinTone: _character!.skinTone,
-          hairStyle: _character!.hairStyle,
-          hairColor: _character!.hairColor,
-          faceShape: _character!.faceShape,
-          outfitId: _character!.outfitId,
-          backgroundId: null,
-          accessories: _character!.accessories,
-          tattoos: _character!.tattoos,
-          bodyType: _character!.bodyType,
-          muscleLevel: _character!.muscleLevel,
-          fatLevel: _character!.fatLevel,
-          gender: _character!.gender,
-        );
+        updated = _character!.copyWith(backgroundId: null);
       case 'tat':
         final current = List<String>.from(_character!.tattoos)
           ..remove(itemId);
@@ -407,12 +408,166 @@ class AppProvider extends ChangeNotifier {
         growthPoints: (_profile!.growthPoints + delta).clamp(0, 999999));
     await DatabaseService.saveProfile(updated);
     _profile = updated;
+    notifyListeners();
   }
+
+  // ── Character Chat ────────────────────────────────────────────
+
+  Future<String?> sendCharacterMessage(String userText) async {
+    if (_gemini == null || _profile == null) return null;
+    _chatting = true;
+    notifyListeners();
+
+    final userMsg = CharacterChatMessage(
+      profileId: _profile!.id,
+      role: 'user',
+      content: userText,
+    );
+    _chatHistory.add(userMsg);
+    await DatabaseService.saveChatMessage(userMsg);
+    notifyListeners();
+
+    try {
+      final historyForAI = _chatHistory
+          .where((m) => m.role == 'user' || m.role == 'character')
+          .map((m) => {'role': m.role, 'content': m.content})
+          .toList();
+
+      final isMirror = _profile!.characterMode == CharacterMode.mirror;
+      final characterName = isMirror
+          ? (_profile!.mirrorGender == '她' ? '小琪' : '小凱')
+          : '時光';
+
+      final reply = await _gemini!.chatWithCharacter(
+        characterName: characterName,
+        relationship: _relationship,
+        isMirror: isMirror,
+        gender: _profile!.mirrorGender ?? _profile!.sex,
+        history: historyForAI,
+        userMessage: userText,
+        todayData: {
+          'calories': todayCalories,
+          'targetCalories': _profile!.calculatedCalorieTarget,
+          'goalPoints': todayGoalPoints,
+          'diary': _todayDiary?.content ?? '',
+        },
+      );
+
+      final charMsg = CharacterChatMessage(
+        profileId: _profile!.id,
+        role: 'character',
+        content: reply,
+      );
+      _chatHistory.add(charMsg);
+      await DatabaseService.saveChatMessage(charMsg);
+
+      // Relationship progression
+      await _updateRelationship();
+
+      return reply;
+    } finally {
+      _chatting = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _updateRelationship() async {
+    final count = await DatabaseService.getChatMessageCount(_profile!.id);
+    String newRel;
+    if (count < 20) {
+      newRel = '陌生人';
+    } else if (count < 60) {
+      newRel = '朋友';
+    } else if (count < 150) {
+      newRel = '曖昧';
+    } else {
+      newRel = '親密';
+    }
+    if (newRel != _relationship) {
+      _relationship = newRel;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kRelationshipKey, _relationship);
+      notifyListeners();
+    }
+  }
+
+  Future<void> resetCharacterRelationship() async {
+    if (_profile == null) return;
+    await DatabaseService.clearChatHistory(_profile!.id);
+    _chatHistory = [];
+    _relationship = '陌生人';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kRelationshipKey, '陌生人');
+    notifyListeners();
+  }
+
+  // ── Knowledge Pre-cache ───────────────────────────────────────
+
+  Future<void> _preCacheKnowledgeIfNeeded(SharedPreferences prefs) async {
+    final today = _dateKey(DateTime.now());
+    final cached = prefs.getString(_kKnowledgeDateKey);
+    if (cached == today) {
+      // Load from DB cache
+      _cachedKnowledge = await DatabaseService.getKnowledgeCache(today);
+      notifyListeners();
+      return;
+    }
+
+    // Generate 5 questions in background
+    final gemini = _gemini;
+    if (gemini == null) return;
+
+    final questions = <Map<String, dynamic>>[];
+    final usedCategories = <String>{};
+    final rng = DateTime.now().millisecondsSinceEpoch;
+
+    for (var i = 0; i < 5 && i < _kKnowledgeCategories.length; i++) {
+      final catIdx = (rng + i * 31) % _kKnowledgeCategories.length;
+      var category = _kKnowledgeCategories[catIdx];
+      // Avoid repeating categories
+      var attempts = 0;
+      while (usedCategories.contains(category) && attempts < 5) {
+        category = _kKnowledgeCategories[(catIdx + attempts) % _kKnowledgeCategories.length];
+        attempts++;
+      }
+      usedCategories.add(category);
+
+      try {
+        final q = await gemini.generateKnowledgeQuestionParsed(category);
+        if (q != null) {
+          q['idx'] = i;
+          questions.add(q);
+          await DatabaseService.saveKnowledgeCache(today, i, q);
+        }
+      } catch (_) {}
+    }
+
+    if (questions.isNotEmpty) {
+      await prefs.setString(_kKnowledgeDateKey, today);
+      _cachedKnowledge = questions;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshKnowledgeCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kKnowledgeDateKey);
+    _cachedKnowledge = [];
+    notifyListeners();
+    await _preCacheKnowledgeIfNeeded(prefs);
+  }
+
+  String _dateKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   // ── Knowledge Quiz ────────────────────────────────────────────
 
   Future<Map<String, String>?> generateKnowledgeQuestion(String category) async {
     return await _gemini?.generateKnowledgeQuestion(category);
+  }
+
+  Future<Map<String, dynamic>?> generateKnowledgeQuestionParsed(
+      String category) async {
+    return await _gemini?.generateKnowledgeQuestionParsed(category);
   }
 
   // ── Mirror Response ──────────────────────────────────────────

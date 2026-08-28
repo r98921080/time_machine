@@ -68,25 +68,29 @@ class GeminiService {
     required String characterMode,
     required String performanceLevel,
   }) async {
-    final prompt = '''你是一個生活記錄AI，幫使用者生成今日的生活Vlog文字。
-風格要根據「表現等級」調整：
-- 卓越：充滿活力、讚美、正向
-- 普通：輕鬆平和、中性
-- 低落：溫柔鼓勵、不批評
+    final prompt = '''你是一個溫柔的生活記錄AI，幫使用者生成今日的Vlog文字日誌。
+風格根據「表現等級」調整：
+- 卓越：充滿活力、讚美、正向鼓勵
+- 超標：溫柔提醒、不批評、找亮點
+- 低落：溫暖抱抱、說今天努力了、明天繼續
 
 使用者資料：
 - 暱稱：$nickname
 - 今日熱量：${calories.round()} / ${targetCalories.round()} kcal
 - 目標點數：$goalPoints 點
-- 日記內容：${diaryContent ?? '（今天沒有寫日記）'}
+- 日記：${diaryContent?.isNotEmpty == true ? diaryContent : '（今天沒有寫日記）'}
 - 角色模式：$characterMode
 - 表現等級：$performanceLevel
 
-請生成約100-150字的今日Vlog，要有溫度、像真人在說話。
-如果角色模式是「映照」，可以加入對象的視角或回應。
-''';
-    final response = await _textModel.generateContent([Content.text(prompt)]);
-    return response.text ?? '今天也是美好的一天。';
+請生成約100-150字的今日Vlog，第一人稱敘事，有溫度像真人在說話。
+如果是映照模式，從使用者想像中的對象視角加入一句話。
+絕對不要空白回覆，一定要有內容。''';
+    try {
+      final response = await _textModel.generateContent([Content.text(prompt)]);
+      final text = response.text?.trim();
+      if (text != null && text.isNotEmpty) return text;
+    } catch (_) {}
+    return '今天是充實的一天。不管結果如何，能記錄下來就是進步的開始。明天的$nickname，會比今天更好。';
   }
 
   // ── Diary Auto-completion ────────────────────────────────────
@@ -138,6 +142,69 @@ $diaryContent
     return response.text ?? '繼續加油！';
   }
 
+  // ── Character Chat (with memory) ─────────────────────────────
+
+  Future<String> chatWithCharacter({
+    required String characterName,
+    required String relationship, // 陌生人/朋友/曖昧/親密
+    required bool isMirror,
+    required String gender, // 她/他
+    required List<Map<String, String>> history, // [{role, content}, ...]
+    required String userMessage,
+    required Map<String, dynamic> todayData, // calories, goalPoints, diary
+  }) async {
+    final roleDesc = isMirror
+        ? '你是使用者理想中的${gender == '她' ? '女朋友' : '男朋友'}候選人，正在和使用者發展關係。'
+        : '你是使用者的生活夥伴，一個關心對方健康和成長的朋友。';
+
+    final relDesc = {
+      '陌生人': '你們剛認識，互動略為正式、謹慎，但帶點好奇。',
+      '朋友': '你們已是朋友，輕鬆自然，偶爾關心對方近況。',
+      '曖昧': '你們互有好感，說話有些嬌羞，偶爾有小曖昧。',
+      '親密': '你們已非常親近，話語溫柔體貼，像家人一般理解對方。',
+    }[relationship] ?? '自然地互動。';
+
+    final todayCalories = todayData['calories'] ?? 0;
+    final todayTarget = todayData['targetCalories'] ?? 2000;
+    final goalPoints = todayData['goalPoints'] ?? 0;
+    final diaryContent = todayData['diary'] ?? '';
+
+    final systemContext = '''$roleDesc
+關係階段：$relationship。$relDesc
+你的名字是「$characterName」。
+
+今天使用者的狀態：
+- 熱量攝取：${todayCalories.round()} / ${todayTarget.round()} kcal
+- 目標得分：$goalPoints 點
+${diaryContent.isNotEmpty ? '- 今日日記：$diaryContent' : ''}
+
+對話規則：
+1. 回應要自然、有個性，不要像機器人
+2. 偶爾主動關心使用者（不要每次都這樣）
+3. 可以提到你「看到」的今日數據，但要自然地帶入，不要像報告
+4. 用繁體中文，不要超過100字
+5. 根據關係階段調整親密度
+6. 不要用敬語，用「你」稱呼對方''';
+
+    // Build message history for context
+    final historyContent = history.takeLast(20).map((h) {
+      return h['role'] == 'user'
+          ? Content.text('使用者：${h['content']}')
+          : Content.text('$characterName：${h['content']}');
+    }).toList();
+
+    final fullPrompt = '$systemContext\n\n以下是最近的對話：\n'
+        '${history.takeLast(10).map((h) => '${h['role'] == 'user' ? '使用者' : characterName}：${h['content']}').join('\n')}'
+        '\n\n使用者現在說：$userMessage\n\n$characterName 回應（不要說自己的名字）：';
+
+    try {
+      final response = await _textModel.generateContent([Content.text(fullPrompt)]);
+      final text = response.text?.trim();
+      if (text != null && text.isNotEmpty) return text;
+    } catch (_) {}
+    return '嗯，我在聽你說。今天辛苦了，好好休息吧。';
+  }
+
   // ── Character Mirror Response ─────────────────────────────────
 
   Future<String> getMirrorResponse({
@@ -150,8 +217,8 @@ $diaryContent
         : performanceRatio >= 0.7
             ? '不錯'
             : '需要加油';
-    final perspective = gender == '女' ? '她' : '他';
-    final prompt = '''你是一個溫柔的角色，站在使用者想像中的$perspective的角度，
+    final perspective = gender == '女' || gender == '她' ? '她' : '他';
+    final prompt = '''你是一個溫柔的角色，站在使用者想像中的${perspective}的角度，
 對使用者今天的表現（$level）說一句話。
 語氣要自然、有情感，像是真實的人在說話。20-40字即可。
 今天的日記：${diaryContent.isEmpty ? '（沒有寫日記）' : diaryContent}''';
@@ -216,7 +283,6 @@ $diaryContent
 
   Map<String, List<String>>? _parseGoalTargets(String json) {
     try {
-      // Simple extraction
       final mini = RegExp(r'"mini":\s*\["([^"]+)"\]').firstMatch(json)?.group(1);
       final advanced = RegExp(r'"advanced":\s*\["([^"]+)"\]').firstMatch(json)?.group(1);
       final elite = RegExp(r'"elite":\s*\["([^"]+)"\]').firstMatch(json)?.group(1);
@@ -233,16 +299,16 @@ $diaryContent
 
   // ── Knowledge Question ────────────────────────────────────────
 
-  Future<Map<String, String>> generateKnowledgeQuestion(String category) async {
+  Future<Map<String, dynamic>?> generateKnowledgeQuestionParsed(String category) async {
     final prompt = '''請生成一道仿「瞎掰王」風格的趣味知識題，類別：$category
 
 格式（嚴格照以下JSON格式輸出）：
 {
-  "question": "題目（有趣、讓人想猜）",
-  "correct": "正確答案（真實有趣的事實）",
-  "wrong1": "假答案1（聽起來合理但是假的）",
-  "wrong2": "假答案2（聽起來合理但是假的）",
-  "wrong3": "假答案3（聽起來合理但是假的）",
+  "question": "題目（有趣、讓人想猜，用問句）",
+  "correct": "正確答案（真實有趣的事實，10字以內）",
+  "wrong1": "假答案1（聽起來合理但是假的，10字以內）",
+  "wrong2": "假答案2（聽起來合理但是假的，10字以內）",
+  "wrong3": "假答案3（聽起來合理但是假的，10字以內）",
   "explanation": "解釋為什麼正確答案是對的（50字以內）",
   "category": "$category"
 }
@@ -250,12 +316,48 @@ $diaryContent
 只輸出JSON，不要其他文字。''';
     try {
       final response = await _textModel.generateContent([Content.text(prompt)]);
-      final text = response.text ?? '{}';
-      final clean = text.replaceAll('```json', '').replaceAll('```', '').trim();
-      // Return as-is for caller to parse
-      return {'raw': clean};
+      final text = (response.text ?? '').replaceAll('```json', '').replaceAll('```', '').trim();
+      final parsed = _parseKnowledgeJson(text);
+      if (parsed != null &&
+          parsed['question'] != null &&
+          parsed['correct'] != null) {
+        return parsed;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Map<String, dynamic>? _parseKnowledgeJson(String text) {
+    try {
+      // Find the JSON object
+      final start = text.indexOf('{');
+      final end = text.lastIndexOf('}');
+      if (start < 0 || end < 0) return null;
+      final jsonStr = text.substring(start, end + 1);
+      final result = <String, dynamic>{};
+      for (final field in ['question', 'correct', 'wrong1', 'wrong2', 'wrong3', 'explanation', 'category']) {
+        final match = RegExp('"$field":\\s*"((?:[^"\\\\]|\\\\.)*)\"').firstMatch(jsonStr);
+        if (match != null) {
+          result[field] = match.group(1)?.replaceAll('\\"', '"') ?? '';
+        }
+      }
+      return result.isNotEmpty ? result : null;
     } catch (_) {
-      return {'raw': '{}'};
+      return null;
     }
+  }
+
+  // Legacy method kept for compatibility
+  Future<Map<String, String>?> generateKnowledgeQuestion(String category) async {
+    final result = await generateKnowledgeQuestionParsed(category);
+    if (result == null) return null;
+    return {'raw': result.toString()};
+  }
+}
+
+extension _ListTakeLast<T> on List<T> {
+  List<T> takeLast(int n) {
+    if (length <= n) return this;
+    return sublist(length - n);
   }
 }

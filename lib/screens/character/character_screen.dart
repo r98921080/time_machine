@@ -6,6 +6,7 @@ import 'dart:convert';
 import '../../providers/app_provider.dart';
 import '../../models/character.dart';
 import '../../models/user_profile.dart';
+import '../../models/chat_message.dart';
 import '../shop/shop_screen.dart';
 
 class CharacterScreen extends StatefulWidget {
@@ -19,11 +20,13 @@ class _CharacterScreenState extends State<CharacterScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _idleCtrl;
   late Animation<double> _idleAnim;
-  String? _mirrorMessage;
-  bool _loadingMirror = false;
   Uint8List? _characterImage;
   bool _generatingImage = false;
   static const _imageCacheKey = 'character_ai_image';
+
+  final TextEditingController _msgCtrl = TextEditingController();
+  final ScrollController _scrollCtrl = ScrollController();
+  bool _chatExpanded = false;
 
   @override
   void initState() {
@@ -39,6 +42,8 @@ class _CharacterScreenState extends State<CharacterScreen>
   @override
   void dispose() {
     _idleCtrl.dispose();
+    _msgCtrl.dispose();
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
@@ -59,12 +64,16 @@ class _CharacterScreenState extends State<CharacterScreen>
     setState(() => _generatingImage = true);
     try {
       final profile = provider.profile!;
+      final character = provider.character!;
       final isMirror = profile.characterMode == CharacterMode.mirror;
       final bytes = await openAI.generateCharacterImage(
         gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
         bodyGoal: profile.goal.name,
         isMirror: isMirror,
         style: 'anime',
+        appearance: character,
+        muscleLevel: character.muscleLevel,
+        fatLevel: character.fatLevel,
       );
       if (bytes != null) {
         final prefs = await SharedPreferences.getInstance();
@@ -109,6 +118,49 @@ class _CharacterScreenState extends State<CharacterScreen>
     );
   }
 
+  void _showAmnesiaDialog(AppProvider provider) {
+    final isMirror =
+        provider.profile?.characterMode == CharacterMode.mirror;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('讓角色失憶？'),
+        content: Text(isMirror
+            ? '${provider.profile?.mirrorGender ?? '她'}會忘記你們之間的所有對話，關係重置為陌生人。確定嗎？'
+            : '角色會忘記所有聊天記錄，關係重置為陌生人。確定嗎？'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: Colors.orange),
+            onPressed: () async {
+              await provider.resetCharacterRelationship();
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('讓他失憶'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendMessage(AppProvider provider) async {
+    final text = _msgCtrl.text.trim();
+    if (text.isEmpty) return;
+    _msgCtrl.clear();
+    await provider.sendCharacterMessage(text);
+    if (_scrollCtrl.hasClients) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      _scrollCtrl.animateTo(
+        _scrollCtrl.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
@@ -118,10 +170,19 @@ class _CharacterScreenState extends State<CharacterScreen>
 
     final theme = Theme.of(context);
     final isMirror = profile.characterMode == CharacterMode.mirror;
+    final characterName = isMirror
+        ? (profile.mirrorGender == '她' ? '小琪' : '小凱')
+        : '時光';
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isMirror ? '映照' : '我的角色'),
+        title: Row(
+          children: [
+            Text(isMirror ? '映照' : '我的角色'),
+            const SizedBox(width: 8),
+            _RelationshipBadge(relationship: provider.relationship),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.shopping_bag_outlined),
@@ -133,94 +194,167 @@ class _CharacterScreenState extends State<CharacterScreen>
             onPressed: () =>
                 _showCustomizeSheet(context, provider, character),
           ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (val) {
+              if (val == 'amnesia') _showAmnesiaDialog(provider);
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'amnesia',
+                child: Row(
+                  children: [
+                    Icon(Icons.psychology_alt, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('讓角色失憶'),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       body: Column(
         children: [
-          Expanded(
-            flex: 3,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: isMirror
-                      ? [
-                          theme.colorScheme.secondaryContainer,
-                          theme.colorScheme.surface,
-                        ]
-                      : [
-                          theme.colorScheme.primaryContainer,
-                          theme.colorScheme.surface,
-                        ],
-                ),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  AnimatedBuilder(
-                    animation: _idleAnim,
-                    builder: (_, child) => Transform.translate(
-                      offset: Offset(0, _idleAnim.value),
-                      child: child,
-                    ),
-                    child: _characterImage != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            child: Image.memory(
-                              _characterImage!,
-                              width: 240,
-                              height: 300,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        : _PlaceholderCharacter(
-                            isMirror: isMirror,
-                            gender: isMirror
-                                ? (profile.mirrorGender ?? '她')
-                                : profile.sex,
-                            theme: theme,
-                          ),
-                  ),
-                  Positioned(
-                    bottom: 16,
-                    right: 16,
-                    child: _generatingImage
-                        ? const CircularProgressIndicator()
-                        : FloatingActionButton.small(
-                            heroTag: 'gen_char',
-                            onPressed: () => _generateImage(provider),
-                            tooltip: 'AI 生成角色圖片',
-                            child: const Icon(Icons.auto_awesome),
-                          ),
-                  ),
-                ],
+          // ── Character image area ──────────────────────────────────
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            height: _chatExpanded ? 160 : 280,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: isMirror
+                    ? [
+                        theme.colorScheme.secondaryContainer,
+                        theme.colorScheme.surface,
+                      ]
+                    : [
+                        theme.colorScheme.primaryContainer,
+                        theme.colorScheme.surface,
+                      ],
               ),
             ),
-          ),
-          Expanded(
-            flex: 2,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  if (isMirror) ...[
-                    _MirrorPanel(
-                      mirrorMessage: _mirrorMessage,
-                      loading: _loadingMirror,
-                      gender: profile.mirrorGender ?? '她',
-                      onRefresh: () => _loadMirrorMessage(provider),
-                      theme: theme,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  _CharacterStats(
-                    profile: profile,
-                    character: character,
-                    theme: theme,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                AnimatedBuilder(
+                  animation: _idleAnim,
+                  builder: (_, child) => Transform.translate(
+                    offset: Offset(0, _idleAnim.value),
+                    child: child,
                   ),
-                ],
-              ),
+                  child: _characterImage != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.memory(
+                            _characterImage!,
+                            width: _chatExpanded ? 100 : 180,
+                            height: _chatExpanded ? 140 : 260,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                      : _PlaceholderCharacter(
+                          isMirror: isMirror,
+                          gender: isMirror
+                              ? (profile.mirrorGender ?? '她')
+                              : profile.sex,
+                          compact: _chatExpanded,
+                          theme: theme,
+                        ),
+                ),
+                Positioned(
+                  bottom: 8,
+                  right: 16,
+                  child: _generatingImage
+                      ? const CircularProgressIndicator()
+                      : FloatingActionButton.small(
+                          heroTag: 'gen_char',
+                          onPressed: () => _generateImage(provider),
+                          tooltip: 'AI 生成角色圖片',
+                          child: const Icon(Icons.auto_awesome),
+                        ),
+                ),
+                // Expand/collapse chat toggle
+                Positioned(
+                  bottom: 8,
+                  left: 16,
+                  child: FloatingActionButton.small(
+                    heroTag: 'toggle_chat',
+                    backgroundColor:
+                        theme.colorScheme.secondaryContainer,
+                    foregroundColor:
+                        theme.colorScheme.onSecondaryContainer,
+                    onPressed: () =>
+                        setState(() => _chatExpanded = !_chatExpanded),
+                    tooltip: _chatExpanded ? '顯示角色' : '展開聊天',
+                    child: Icon(_chatExpanded
+                        ? Icons.person
+                        : Icons.chat_bubble_outline),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Chat area ─────────────────────────────────────────────
+          Expanded(
+            child: Column(
+              children: [
+                // Character name + relationship
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  child: Row(
+                    children: [
+                      Text(characterName,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 8),
+                      Text(
+                        _relationshipDesc(provider.relationship),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontStyle: FontStyle.italic),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+
+                // Message list
+                Expanded(
+                  child: provider.chatHistory.isEmpty
+                      ? _EmptyChatPlaceholder(
+                          characterName: characterName,
+                          relationship: provider.relationship,
+                          theme: theme,
+                        )
+                      : ListView.builder(
+                          controller: _scrollCtrl,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          itemCount: provider.chatHistory.length,
+                          itemBuilder: (ctx, i) {
+                            final msg = provider.chatHistory[i];
+                            final isUser = msg.role == 'user';
+                            return _ChatBubble(
+                              message: msg,
+                              isUser: isUser,
+                              characterName: characterName,
+                              theme: theme,
+                            );
+                          },
+                        ),
+                ),
+
+                // Input area
+                _ChatInput(
+                  controller: _msgCtrl,
+                  sending: provider.chatting,
+                  onSend: () => _sendMessage(provider),
+                  theme: theme,
+                ),
+              ],
             ),
           ),
         ],
@@ -228,19 +362,19 @@ class _CharacterScreenState extends State<CharacterScreen>
     );
   }
 
-  Future<void> _loadMirrorMessage(AppProvider provider) async {
-    setState(() => _loadingMirror = true);
-    try {
-      final msg = await provider.getMirrorResponse();
-      setState(() => _mirrorMessage = msg);
-    } finally {
-      setState(() => _loadingMirror = false);
-    }
+  String _relationshipDesc(String rel) {
+    return {
+          '陌生人': '剛認識，有些陌生',
+          '朋友': '熟悉的朋友',
+          '曖昧': '彼此有好感',
+          '親密': '非常親近的關係',
+        }[rel] ??
+        rel;
   }
 
-  void _showCustomizeSheet(BuildContext context, AppProvider provider,
-      CharacterAppearance current) {
-    showModalBottomSheet(
+  Future<void> _showCustomizeSheet(BuildContext context, AppProvider provider,
+      CharacterAppearance current) async {
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (_) =>
@@ -249,41 +383,71 @@ class _CharacterScreenState extends State<CharacterScreen>
   }
 }
 
-// ── Placeholder when no AI image yet ─────────────────────────────
-class _PlaceholderCharacter extends StatelessWidget {
-  final bool isMirror;
-  final String gender;
+// ── Relationship badge ────────────────────────────────────────────────
+class _RelationshipBadge extends StatelessWidget {
+  final String relationship;
+  const _RelationshipBadge({required this.relationship});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = {
+      '陌生人': (Colors.grey.shade600, Colors.grey.shade100),
+      '朋友': (Colors.blue.shade700, Colors.blue.shade50),
+      '曖昧': (Colors.pink.shade600, Colors.pink.shade50),
+      '親密': (Colors.red.shade600, Colors.red.shade50),
+    };
+    final (fg, bg) = colors[relationship] ??
+        (Colors.grey.shade600, Colors.grey.shade100);
+    final icons = {
+      '陌生人': '👤',
+      '朋友': '😊',
+      '曖昧': '💗',
+      '親密': '❤️',
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        '${icons[relationship] ?? ''} $relationship',
+        style: TextStyle(
+            fontSize: 11, color: fg, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+// ── Empty chat placeholder ────────────────────────────────────────────
+class _EmptyChatPlaceholder extends StatelessWidget {
+  final String characterName;
+  final String relationship;
   final ThemeData theme;
-  const _PlaceholderCharacter(
-      {required this.isMirror,
-      required this.gender,
+  const _EmptyChatPlaceholder(
+      {required this.characterName,
+      required this.relationship,
       required this.theme});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 200,
-      height: 280,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-            color: theme.colorScheme.outlineVariant, width: 2,
-            style: BorderStyle.solid),
-      ),
+    final hints = {
+      '陌生人': '說聲「你好」，開始認識$characterName吧！',
+      '朋友': '和$characterName聊聊今天過得怎麼樣',
+      '曖昧': '傳個訊息給$characterName，看${characterName}怎麼說',
+      '親密': '$characterName在等你說話呢',
+    };
+    return Center(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
+          Text('💬', style: const TextStyle(fontSize: 40)),
+          const SizedBox(height: 12),
           Text(
-            isMirror ? (gender == '她' ? '👩' : '👨') : '🙂',
-            style: const TextStyle(fontSize: 64),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '點擊 ✨ 按鈕\nAI 生成角色圖片',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
+            hints[relationship] ?? '開始對話吧',
+            style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -291,62 +455,63 @@ class _PlaceholderCharacter extends StatelessWidget {
   }
 }
 
-// ── Mirror Panel ──────────────────────────────────────────────────
-class _MirrorPanel extends StatelessWidget {
-  final String? mirrorMessage;
-  final bool loading;
-  final String gender;
-  final VoidCallback onRefresh;
+// ── Chat bubble ───────────────────────────────────────────────────────
+class _ChatBubble extends StatelessWidget {
+  final CharacterChatMessage message;
+  final bool isUser;
+  final String characterName;
   final ThemeData theme;
 
-  const _MirrorPanel({
-    required this.mirrorMessage,
-    required this.loading,
-    required this.gender,
-    required this.onRefresh,
+  const _ChatBubble({
+    required this.message,
+    required this.isUser,
+    required this.characterName,
     required this.theme,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: theme.colorScheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.75),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Text(gender == '她' ? '💕' : '💙',
-                    style: const TextStyle(fontSize: 16)),
-                const SizedBox(width: 8),
-                Text('$gender 說…',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onPrimaryContainer)),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.refresh, size: 18),
-                  onPressed: loading ? null : onRefresh,
-                  color: theme.colorScheme.onPrimaryContainer,
-                ),
-              ],
-            ),
-            if (loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: LinearProgressIndicator(),
-              )
-            else
-              Text(
-                mirrorMessage ?? '點擊右上角重新整理，聽聽${gender}說什麼...',
-                style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onPrimaryContainer,
-                    fontStyle: mirrorMessage == null
-                        ? FontStyle.italic
-                        : FontStyle.normal),
+            if (!isUser)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 2),
+                child: Text(characterName,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant)),
               ),
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isUser
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: Radius.circular(isUser ? 16 : 4),
+                  bottomRight: Radius.circular(isUser ? 4 : 16),
+                ),
+              ),
+              child: Text(
+                message.content,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: isUser
+                      ? theme.colorScheme.onPrimary
+                      : theme.colorScheme.onSurface,
+                  height: 1.4,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -354,76 +519,119 @@ class _MirrorPanel extends StatelessWidget {
   }
 }
 
-// ── Character Stats ───────────────────────────────────────────────
-class _CharacterStats extends StatelessWidget {
-  final dynamic profile;
-  final CharacterAppearance character;
+// ── Chat input ────────────────────────────────────────────────────────
+class _ChatInput extends StatelessWidget {
+  final TextEditingController controller;
+  final bool sending;
+  final VoidCallback onSend;
   final ThemeData theme;
 
-  const _CharacterStats({
-    required this.profile,
-    required this.character,
+  const _ChatInput({
+    required this.controller,
+    required this.sending,
+    required this.onSend,
     required this.theme,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('體態進度', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 12),
-            _ProgressRow('肌肉線條', character.muscleLevel,
-                theme.colorScheme.primary, theme),
-            const SizedBox(height: 8),
-            _ProgressRow('體脂控制', 1 - character.fatLevel,
-                theme.colorScheme.tertiary, theme),
-          ],
-        ),
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+          12, 8, 12, 8 + MediaQuery.of(context).viewInsets.bottom),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+            top: BorderSide(color: theme.colorScheme.outlineVariant)),
       ),
-    );
-  }
-}
-
-class _ProgressRow extends StatelessWidget {
-  final String label;
-  final double value;
-  final Color color;
-  final ThemeData theme;
-
-  const _ProgressRow(this.label, this.value, this.color, this.theme);
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-            width: 60,
-            child: Text(label, style: theme.textTheme.labelSmall)),
-        const SizedBox(width: 8),
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: value.clamp(0.0, 1.0),
-              minHeight: 8,
-              backgroundColor: theme.colorScheme.surfaceContainerHighest,
-              valueColor: AlwaysStoppedAnimation(color),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              decoration: InputDecoration(
+                hintText: '傳訊息給角色…',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                fillColor: theme.colorScheme.surfaceContainerHighest,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                isDense: true,
+              ),
+              maxLines: 3,
+              minLines: 1,
+              textInputAction: TextInputAction.newline,
+              onSubmitted: (_) => onSend(),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Text('${(value * 100).round()}%',
-            style: theme.textTheme.labelSmall?.copyWith(color: color)),
-      ],
+          const SizedBox(width: 8),
+          sending
+              ? const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+              : IconButton.filled(
+                  icon: const Icon(Icons.send),
+                  onPressed: onSend,
+                  style: IconButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
+                  ),
+                ),
+        ],
+      ),
     );
   }
 }
 
-// ── Customize Sheet ───────────────────────────────────────────────
+// ── Placeholder when no AI image yet ─────────────────────────────────
+class _PlaceholderCharacter extends StatelessWidget {
+  final bool isMirror;
+  final String gender;
+  final bool compact;
+  final ThemeData theme;
+  const _PlaceholderCharacter(
+      {required this.isMirror,
+      required this.gender,
+      required this.compact,
+      required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: compact ? 90 : 180,
+      height: compact ? 130 : 250,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+            color: theme.colorScheme.outlineVariant, width: 2),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            isMirror ? (gender == '她' ? '👩' : '👨') : '🙂',
+            style: TextStyle(fontSize: compact ? 32 : 52),
+          ),
+          if (!compact) ...[
+            const SizedBox(height: 12),
+            Text(
+              '點擊 ✨\nAI 生成圖片',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Customize Sheet ───────────────────────────────────────────────────
 class _CustomizeSheet extends StatefulWidget {
   final CharacterAppearance current;
   final AppProvider provider;
@@ -468,7 +676,7 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
           _EnumRow<SkinTone>(
             values: SkinTone.values,
             selected: _appearance.skinTone,
-            labels: ['淺', '中', '小麥', '深'],
+            labels: ['淺膚色', '中等', '小麥色', '深膚色'],
             onTap: (v) =>
                 setState(() => _appearance = _appearance.copyWith(skinTone: v)),
           ),
@@ -477,7 +685,7 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
           _EnumRow<HairStyle>(
             values: HairStyle.values,
             selected: _appearance.hairStyle,
-            labels: ['短', '中', '長', '包子頭', '馬尾', '捲髮'],
+            labels: ['短髮', '中長髮', '長髮', '包子頭', '馬尾', '捲髮'],
             onTap: (v) => setState(
                 () => _appearance = _appearance.copyWith(hairStyle: v)),
           ),
@@ -486,7 +694,7 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
           _EnumRow<HairColor>(
             values: HairColor.values,
             selected: _appearance.hairColor,
-            labels: ['黑', '棕', '金', '紅', '灰', '幻想色'],
+            labels: ['黑髮', '棕髮', '金髮', '紅髮', '銀髮', '幻想色'],
             onTap: (v) => setState(
                 () => _appearance = _appearance.copyWith(hairColor: v)),
           ),
@@ -544,7 +752,8 @@ class _EnumRow<T> extends StatelessWidget {
           onTap: () => onTap(values[i]),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: isSelected
                   ? theme.colorScheme.primaryContainer

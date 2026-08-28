@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
@@ -12,76 +10,114 @@ class KnowledgeScreen extends StatefulWidget {
 }
 
 class _KnowledgeScreenState extends State<KnowledgeScreen> {
-  bool _loading = true;
-  Map<String, dynamic>? _question;
-  List<String> _options = [];
+  int _currentIndex = 0;
   int? _selectedIndex;
   bool _revealed = false;
   int _score = 0;
+  bool _generatingFallback = false;
+
+  List<Map<String, dynamic>> _questions = [];
+  List<String> _options = [];
 
   static const _categories = [
     '自然科學', '歷史冷知識', '人體秘密', '食物真相', '動物奇聞',
     '太空宇宙', '心理學', '數學趣味', '古文明', '科技發明',
+    '藝術音樂', '地理文化', '語言文字', '運動趣聞', '台灣文化',
   ];
 
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initQuestions());
   }
 
-  Future<void> _load() async {
+  void _initQuestions() {
+    final provider = context.read<AppProvider>();
+    final cached = provider.cachedKnowledge;
+    if (cached.isNotEmpty) {
+      setState(() {
+        _questions = List<Map<String, dynamic>>.from(cached);
+        _currentIndex = 0;
+        _setupCurrentQuestion();
+      });
+    } else {
+      _generateFallback();
+    }
+  }
+
+  void _setupCurrentQuestion() {
+    if (_questions.isEmpty) return;
+    final q = _questions[_currentIndex];
+    final correct = q['correct'] as String? ?? '';
+    final wrong1 = q['wrong1'] as String? ?? '';
+    final wrong2 = q['wrong2'] as String? ?? '';
+    final wrong3 = q['wrong3'] as String? ?? '';
+    final opts = [correct, wrong1, wrong2, if (wrong3.isNotEmpty) wrong3]
+      ..shuffle();
     setState(() {
-      _loading = true;
+      _options = opts;
       _selectedIndex = null;
       _revealed = false;
     });
+  }
+
+  Future<void> _generateFallback() async {
+    setState(() => _generatingFallback = true);
     final provider = context.read<AppProvider>();
-    final rng = Random();
-    final category = _categories[rng.nextInt(_categories.length)];
+    final category = _categories[DateTime.now().millisecond % _categories.length];
     try {
-      final raw = await provider.generateKnowledgeQuestion(category)
-          ?? {'raw': '{}'};
-      final parsed = jsonDecode(raw['raw'] ?? '{}') as Map<String, dynamic>;
-      if (parsed.isNotEmpty && parsed['question'] != null) {
-        final correct = parsed['correct'] as String? ?? '';
-        final wrong1 = parsed['wrong1'] as String? ?? '';
-        final wrong2 = parsed['wrong2'] as String? ?? '';
-        final wrong3 = parsed['wrong3'] as String? ?? '';
-        final opts = [correct, wrong1, wrong2, if (wrong3.isNotEmpty) wrong3]..shuffle();
+      final q = await provider.generateKnowledgeQuestionParsed(category);
+      if (q != null && q['question'] != null && mounted) {
         setState(() {
-          _question = parsed;
-          _options = opts;
-          _loading = false;
+          _questions = [q];
+          _currentIndex = 0;
+          _generatingFallback = false;
+          _setupCurrentQuestion();
         });
         return;
       }
     } catch (_) {}
+    // Hard fallback
     setState(() {
-      _question = {
-        'question': '章魚有幾顆心臟？',
-        'correct': '3顆',
-        'wrong1': '1顆',
-        'wrong2': '2顆',
-        'explanation': '章魚有3顆心臟：1顆主心臟負責全身循環，另外2顆鰓心臟負責將血液送往鰓部進行氧氣交換。',
-        'category': '動物奇聞',
-      };
-      _options = ['1顆', '3顆', '2顆'];
-      _loading = false;
+      _questions = [
+        {
+          'question': '章魚有幾顆心臟？',
+          'correct': '3顆',
+          'wrong1': '1顆',
+          'wrong2': '2顆',
+          'wrong3': '4顆',
+          'explanation': '章魚有3顆心臟：1顆主心臟負責全身循環，另外2顆鰓心臟負責將血液送往鰓部。',
+          'category': '動物奇聞',
+        },
+        {
+          'question': '人類一生中平均走多少步？',
+          'correct': '約1億步',
+          'wrong1': '約1千萬步',
+          'wrong2': '約5億步',
+          'wrong3': '約5千萬步',
+          'explanation': '一般人每天約走8000步，以80年計算，一生約走1億步以上。',
+          'category': '人體秘密',
+        },
+      ];
+      _currentIndex = 0;
+      _generatingFallback = false;
+      _setupCurrentQuestion();
     });
   }
 
   void _reveal() {
     if (_selectedIndex == null) return;
     setState(() => _revealed = true);
-    final isCorrect = _options[_selectedIndex!] == _question!['correct'];
+    final q = _questions[_currentIndex];
+    final isCorrect = _options[_selectedIndex!] == q['correct'];
     if (isCorrect) {
       setState(() => _score++);
-      context.read<AppProvider>().updateProfile(
-          context.read<AppProvider>().profile!.copyWith(
-              growthPoints:
-                  (context.read<AppProvider>().profile!.growthPoints + 20)
-                      .clamp(0, 999999)));
+      final provider = context.read<AppProvider>();
+      final profile = provider.profile;
+      if (profile != null) {
+        provider.updateProfile(profile.copyWith(
+            growthPoints: (profile.growthPoints + 20).clamp(0, 999999)));
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('🎉 答對了！獲得 20 成長點數'),
@@ -92,9 +128,49 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
     }
   }
 
+  void _nextQuestion() {
+    if (_currentIndex < _questions.length - 1) {
+      setState(() => _currentIndex++);
+      _setupCurrentQuestion();
+    } else {
+      // Wrapped around — show completion
+      _showCompletionDialog();
+    }
+  }
+
+  void _showCompletionDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('🎓 今日題目完成！'),
+        content: Text('你答對了 $_score / ${_questions.length} 題\n'
+            '共獲得 ${_score * 20} 成長點數！'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Restart from first question
+              setState(() {
+                _currentIndex = 0;
+                _score = 0;
+              });
+              _setupCurrentQuestion();
+            },
+            child: const Text('再玩一次'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('完成'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isLoading = _generatingFallback || _questions.isEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -103,166 +179,199 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Center(
-              child: Text('本次得分: $_score',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary)),
+              child: Text(
+                '${_currentIndex + 1} / ${_questions.isEmpty ? '?' : _questions.length}  ✨$_score',
+                style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary),
+              ),
             ),
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _question == null
-              ? const Center(child: Text('無法載入，請重試'))
-              : Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: isLoading
+          ? const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('準備今日題目中…'),
+                ],
+              ),
+            )
+          : _buildQuestion(theme),
+    );
+  }
+
+  Widget _buildQuestion(ThemeData theme) {
+    final q = _questions[_currentIndex];
+
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Progress indicator
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (_currentIndex + 1) / _questions.length,
+              minHeight: 6,
+              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Category chip
+          Center(
+            child: Chip(
+              label: Text(q['category'] ?? '知識'),
+              avatar: const Text('🧠'),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Question card
+          Card(
+            color: theme.colorScheme.primaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                q['question'] ?? '',
+                style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onPrimaryContainer,
+                    height: 1.5),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Options
+          ..._options.asMap().entries.map((entry) {
+            final i = entry.key;
+            final opt = entry.value;
+            final isCorrect = opt == q['correct'];
+            final isSelected = _selectedIndex == i;
+
+            Color bgColor;
+            Color textColor;
+            Color? borderColor;
+            IconData? trailingIcon;
+            Color? iconColor;
+
+            if (_revealed) {
+              if (isCorrect) {
+                bgColor = Colors.green.shade700;
+                textColor = Colors.white;
+                trailingIcon = Icons.check_circle;
+                iconColor = Colors.white;
+              } else if (isSelected) {
+                bgColor = Colors.red.shade700;
+                textColor = Colors.white;
+                trailingIcon = Icons.cancel;
+                iconColor = Colors.white;
+              } else {
+                bgColor = theme.colorScheme.surfaceContainerHighest;
+                textColor = theme.colorScheme.onSurfaceVariant;
+              }
+            } else if (isSelected) {
+              bgColor = theme.colorScheme.primary;
+              textColor = theme.colorScheme.onPrimary;
+              borderColor = theme.colorScheme.primary;
+            } else {
+              bgColor = theme.colorScheme.surfaceContainerHighest;
+              textColor = theme.colorScheme.onSurfaceVariant;
+            }
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: GestureDetector(
+                onTap:
+                    _revealed ? null : () => setState(() => _selectedIndex = i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: borderColor != null
+                        ? Border.all(color: borderColor, width: 2)
+                        : null,
+                  ),
+                  child: Row(
                     children: [
-                      Center(
-                        child: Chip(
-                          label: Text(_question!['category'] ?? '知識'),
-                          avatar: const Text('🧠'),
-                        ),
+                      Expanded(
+                        child: Text(opt,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                                color: textColor,
+                                fontWeight: isSelected ||
+                                        (_revealed && isCorrect)
+                                    ? FontWeight.bold
+                                    : null)),
                       ),
-                      const SizedBox(height: 20),
-                      Card(
-                        color: theme.colorScheme.primaryContainer,
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Text(
-                            _question!['question'] ?? '',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.onPrimaryContainer,
-                                height: 1.5),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      ..._options.asMap().entries.map((entry) {
-                        final i = entry.key;
-                        final opt = entry.value;
-                        final isCorrect = opt == _question!['correct'];
-                        final isSelected = _selectedIndex == i;
-
-                        Color bgColor;
-                        Color textColor;
-                        Color? borderColor;
-                        IconData? trailingIcon;
-                        Color? iconColor;
-
-                        if (_revealed) {
-                          if (isCorrect) {
-                            bgColor = Colors.green.shade700;
-                            textColor = Colors.white;
-                            trailingIcon = Icons.check_circle;
-                            iconColor = Colors.white;
-                          } else if (isSelected) {
-                            bgColor = Colors.red.shade700;
-                            textColor = Colors.white;
-                            trailingIcon = Icons.cancel;
-                            iconColor = Colors.white;
-                          } else {
-                            bgColor = theme.colorScheme.surfaceContainerHighest;
-                            textColor = theme.colorScheme.onSurfaceVariant;
-                          }
-                        } else if (isSelected) {
-                          bgColor = theme.colorScheme.primary;
-                          textColor = theme.colorScheme.onPrimary;
-                          borderColor = theme.colorScheme.primary;
-                        } else {
-                          bgColor = theme.colorScheme.surfaceContainerHighest;
-                          textColor = theme.colorScheme.onSurfaceVariant;
-                        }
-
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: GestureDetector(
-                            onTap: _revealed
-                                ? null
-                                : () => setState(() => _selectedIndex = i),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 14),
-                              decoration: BoxDecoration(
-                                color: bgColor,
-                                borderRadius: BorderRadius.circular(12),
-                                border: borderColor != null
-                                    ? Border.all(color: borderColor, width: 2)
-                                    : null,
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(opt,
-                                        style: theme.textTheme.bodyMedium
-                                            ?.copyWith(
-                                                color: textColor,
-                                                fontWeight: isSelected ||
-                                                        (_revealed && isCorrect)
-                                                    ? FontWeight.bold
-                                                    : null)),
-                                  ),
-                                  if (trailingIcon != null)
-                                    Icon(trailingIcon,
-                                        color: iconColor, size: 22),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                      const SizedBox(height: 8),
-                      if (!_revealed) ...[
-                        FilledButton(
-                          onPressed: _selectedIndex == null ? null : _reveal,
-                          child: const Text('揭曉答案'),
-                        ),
-                      ] else ...[
-                        Card(
-                          color: theme.colorScheme.tertiaryContainer,
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Text('💡',
-                                        style: TextStyle(fontSize: 16)),
-                                    const SizedBox(width: 6),
-                                    Text('解釋',
-                                        style: theme.textTheme.labelMedium
-                                            ?.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                                color: theme.colorScheme.onTertiaryContainer)),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _question!['explanation'] ?? '',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                      height: 1.6,
-                                      color: theme.colorScheme.onTertiaryContainer),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        FilledButton.icon(
-                          icon: const Icon(Icons.arrow_forward),
-                          label: const Text('下一題'),
-                          onPressed: _load,
-                        ),
-                      ],
+                      if (trailingIcon != null)
+                        Icon(trailingIcon, color: iconColor, size: 22),
                     ],
                   ),
                 ),
+              ),
+            );
+          }),
+
+          const SizedBox(height: 8),
+
+          if (!_revealed)
+            FilledButton(
+              onPressed: _selectedIndex == null ? null : _reveal,
+              child: const Text('揭曉答案'),
+            )
+          else ...[
+            // Explanation
+            Card(
+              color: theme.colorScheme.tertiaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('💡', style: TextStyle(fontSize: 16)),
+                        const SizedBox(width: 6),
+                        Text('解釋',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.onTertiaryContainer)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      q['explanation'] ?? '',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          height: 1.6,
+                          color: theme.colorScheme.onTertiaryContainer),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              icon: Icon(_currentIndex < _questions.length - 1
+                  ? Icons.arrow_forward
+                  : Icons.check),
+              label: Text(_currentIndex < _questions.length - 1
+                  ? '下一題'
+                  : '完成今日挑戰'),
+              onPressed: _nextQuestion,
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

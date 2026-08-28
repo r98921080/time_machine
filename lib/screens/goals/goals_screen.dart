@@ -70,7 +70,7 @@ class _AddCategorySheetState extends State<_AddCategorySheet> {
   String? _selectedSubCat;
   Map<String, List<String>>? _aiTargets;
   bool _loadingTargets = false;
-  int _step = 0; // 0=選類別, 1=選子類, 2=確認目標
+  int _step = 0;
 
   @override
   void dispose() {
@@ -91,9 +91,7 @@ class _AddCategorySheetState extends State<_AddCategorySheet> {
   }
 
   Future<void> _createGoal() async {
-    final catName = _ctrl.text.trim().isEmpty
-        ? (_step > 0 ? _ctrl.text : '')
-        : _ctrl.text.trim();
+    final catName = _ctrl.text.trim();
     if (catName.isEmpty && _selectedSubCat == null) return;
     final title = _selectedSubCat != null
         ? '${_cleanLabel(catName)} · $_selectedSubCat'
@@ -151,8 +149,6 @@ class _AddCategorySheetState extends State<_AddCategorySheet> {
                     style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant)),
                 const SizedBox(height: 16),
-
-                // Preset category chips
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -169,8 +165,6 @@ class _AddCategorySheetState extends State<_AddCategorySheet> {
                   }).toList(),
                 ),
                 const SizedBox(height: 16),
-
-                // Custom input
                 TextField(
                   controller: _ctrl,
                   decoration: InputDecoration(
@@ -189,18 +183,15 @@ class _AddCategorySheetState extends State<_AddCategorySheet> {
                     ),
                   ),
                 ),
-
                 if (_step >= 1) ...[
                   const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      const Icon(Icons.auto_awesome, size: 16),
-                      const SizedBox(width: 6),
-                      Text('AI 建議子類別',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold)),
-                    ],
-                  ),
+                  Row(children: [
+                    const Icon(Icons.auto_awesome, size: 16),
+                    const SizedBox(width: 6),
+                    Text('AI 建議子類別',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold)),
+                  ]),
                   const SizedBox(height: 10),
                   if (_loadingSubCats)
                     const Center(child: CircularProgressIndicator())
@@ -211,65 +202,51 @@ class _AddCategorySheetState extends State<_AddCategorySheet> {
                       children: _subCategories.map((sub) {
                         final active = _selectedSubCat == sub && _step == 2;
                         return ActionChip(
-                          avatar: active
-                              ? const Icon(Icons.check, size: 16)
-                              : null,
+                          avatar: active ? const Icon(Icons.check, size: 16) : null,
                           label: Text(sub),
-                          backgroundColor: active
-                              ? theme.colorScheme.primaryContainer
-                              : null,
-                          onPressed: () => _loadTargets(
-                              _cleanLabel(_ctrl.text), sub),
+                          backgroundColor: active ? theme.colorScheme.primaryContainer : null,
+                          onPressed: () => _loadTargets(_cleanLabel(_ctrl.text), sub),
                         );
                       }).toList(),
                     ),
                 ],
-
                 if (_step >= 2) ...[
                   const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      const Icon(Icons.flag_outlined, size: 16),
-                      const SizedBox(width: 6),
-                      Text('AI 生成目標（可編輯）',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold)),
-                    ],
-                  ),
+                  Row(children: [
+                    const Icon(Icons.flag_outlined, size: 16),
+                    const SizedBox(width: 6),
+                    Text('AI 生成目標（可編輯）',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold)),
+                  ]),
                   const SizedBox(height: 10),
                   if (_loadingTargets)
                     const Center(child: CircularProgressIndicator())
                   else if (_aiTargets != null)
-                    _TargetPreviewCard(
-                      targets: _aiTargets!,
-                      theme: theme,
-                    )
+                    _TargetPreviewCard(targets: _aiTargets!, theme: theme)
                   else
                     const Text('無法生成，將建立空白目標'),
                 ],
-
                 const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('取消'),
-                      ),
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('取消'),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: FilledButton.icon(
-                        icon: const Icon(Icons.add),
-                        label: Text(_step == 0 ? '直接建立' : '建立目標'),
-                        onPressed: _step == 0 && _ctrl.text.trim().isEmpty
-                            ? null
-                            : _createGoal,
-                      ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.add),
+                      label: Text(_step == 0 ? '直接建立' : '建立目標'),
+                      onPressed: _step == 0 && _ctrl.text.trim().isEmpty
+                          ? null
+                          : _createGoal,
                     ),
-                  ],
-                ),
+                  ),
+                ]),
                 const SizedBox(height: 20),
               ],
             ),
@@ -308,9 +285,7 @@ class _TargetPreviewCard extends StatelessWidget {
                       style: theme.textTheme.labelSmall?.copyWith(
                           color: r.$3, fontWeight: FontWeight.bold)),
                 ),
-                Expanded(
-                  child: Text(r.$2, style: theme.textTheme.bodySmall),
-                ),
+                Expanded(child: Text(r.$2, style: theme.textTheme.bodySmall)),
               ],
             ),
           )).toList(),
@@ -359,9 +334,10 @@ class _CategoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final todayLogs = provider.todayLogs;
-    final loggedIds = todayLogs.map((l) => l.subItemId).toSet();
+    // Count unique subItems that have at least one log
+    final loggedSubItems = todayLogs.map((l) => l.subItemId).toSet();
     final completedCount = category.subItems
-        .where((s) => loggedIds.contains(s.id))
+        .where((s) => loggedSubItems.contains(s.id))
         .length;
     final total = category.subItems.length;
     final progress = total > 0 ? completedCount / total : 0.0;
@@ -396,107 +372,38 @@ class _CategoryCard extends StatelessWidget {
             ),
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 20),
-              onPressed: () => provider.deleteCategory(category.id),
+              onPressed: () => _confirmDelete(context, provider),
             ),
           ],
         ),
-        children: category.subItems.map((item) {
-          final logged = todayLogs.firstWhere(
-            (l) => l.subItemId == item.id,
-            orElse: () => DailyGoalLog(
-              profileId: provider.profile!.id,
-              subItemId: item.id,
-              achieved: GoalLevel.mini,
-              score: 0,
-              date: DateTime.now(),
-            ),
-          );
-          final isLogged = loggedIds.contains(item.id);
-
-          return ListTile(
-            title: Text(item.name, style: theme.textTheme.bodyMedium),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _LevelBadge('🌱 入門', item.miniTarget, Colors.blue),
-                _LevelBadge('⚡ 進階', item.advancedTarget, Colors.orange),
-                _LevelBadge('🏆 精英', item.eliteTarget, Colors.green),
-              ],
-            ),
-            trailing: isLogged
-                ? Chip(
-                    label: Text(logged.achieved.label,
-                        style: const TextStyle(fontSize: 11)),
-                    backgroundColor: _levelColor(logged.achieved),
-                  )
-                : TextButton(
-                    onPressed: () => _showLogDialog(context, provider, item),
-                    child: const Text('打卡'),
-                  ),
-          );
-        }).toList(),
+        children: [
+          ...category.subItems.map((item) => _SubItemTile(
+            item: item,
+            provider: provider,
+            theme: theme,
+          )),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }
 
-  Color _levelColor(GoalLevel level) {
-    switch (level) {
-      case GoalLevel.mini: return Colors.blue.shade100;
-      case GoalLevel.advanced: return Colors.orange.shade100;
-      case GoalLevel.elite: return Colors.green.shade100;
-    }
-  }
-
-  void _showLogDialog(
-      BuildContext context, AppProvider provider, GoalSubItem item) {
-    GoalLevel selected = GoalLevel.mini;
+  void _confirmDelete(BuildContext context, AppProvider provider) {
     showDialog(
       context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: Text(item.name),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: GoalLevel.values.map((level) {
-              final target = level == GoalLevel.mini
-                  ? item.miniTarget
-                  : level == GoalLevel.advanced
-                      ? item.advancedTarget
-                      : item.eliteTarget;
-              final emoji = level == GoalLevel.mini
-                  ? '🌱'
-                  : level == GoalLevel.advanced
-                      ? '⚡'
-                      : '🏆';
-              return RadioListTile<GoalLevel>(
-                value: level,
-                groupValue: selected,
-                onChanged: (v) => setS(() => selected = v!),
-                title: Text('$emoji ${level.label}'),
-                subtitle: Text(target, style: const TextStyle(fontSize: 11)),
-              );
-            }).toList(),
+      builder: (_) => AlertDialog(
+        title: const Text('刪除目標'),
+        content: Text('確定刪除「${category.title}」嗎？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          FilledButton(
+            onPressed: () {
+              provider.deleteCategory(category.id);
+              Navigator.pop(context);
+            },
+            child: const Text('刪除'),
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消')),
-            FilledButton(
-              onPressed: () {
-                provider.logGoal(DailyGoalLog(
-                  profileId: provider.profile!.id,
-                  subItemId: item.id,
-                  achieved: selected,
-                  score: selected.points,
-                  date: DateTime.now(),
-                ));
-                provider.checkAndUpdateStreak();
-                Navigator.pop(ctx);
-              },
-              child: const Text('確認'),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -572,28 +479,191 @@ class _CategoryCard extends StatelessWidget {
   }
 }
 
-class _LevelBadge extends StatelessWidget {
-  final String prefix;
-  final String target;
-  final Color color;
-  const _LevelBadge(this.prefix, this.target, this.color);
+// ── Sub Item Tile with independent level check-in ─────────────────
+class _SubItemTile extends StatelessWidget {
+  final GoalSubItem item;
+  final AppProvider provider;
+  final ThemeData theme;
+
+  const _SubItemTile({
+    required this.item,
+    required this.provider,
+    required this.theme,
+  });
+
+  Set<GoalLevel> _loggedLevels() {
+    return provider.todayLogs
+        .where((l) => l.subItemId == item.id)
+        .map((l) => l.achieved)
+        .toSet();
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (target.isEmpty) return const SizedBox.shrink();
+    final logged = _loggedLevels();
+
     return Padding(
-      padding: const EdgeInsets.only(top: 2),
-      child: RichText(
-        text: TextSpan(
-          style: const TextStyle(fontSize: 11),
-          children: [
-            TextSpan(
-                text: '$prefix ',
-                style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-            TextSpan(
-                text: target,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          ],
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(item.name,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _LevelButton(
+                level: GoalLevel.mini,
+                target: item.miniTarget,
+                checked: logged.contains(GoalLevel.mini),
+                onToggle: () => _toggle(context, GoalLevel.mini, logged),
+                theme: theme,
+              ),
+              const SizedBox(width: 8),
+              _LevelButton(
+                level: GoalLevel.advanced,
+                target: item.advancedTarget,
+                checked: logged.contains(GoalLevel.advanced),
+                onToggle: () => _toggle(context, GoalLevel.advanced, logged),
+                theme: theme,
+              ),
+              const SizedBox(width: 8),
+              _LevelButton(
+                level: GoalLevel.elite,
+                target: item.eliteTarget,
+                checked: logged.contains(GoalLevel.elite),
+                onToggle: () => _toggle(context, GoalLevel.elite, logged),
+                theme: theme,
+              ),
+            ],
+          ),
+          const Divider(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggle(BuildContext context, GoalLevel level,
+      Set<GoalLevel> currentLogged) async {
+    if (currentLogged.contains(level)) {
+      // Cancel this level
+      await provider.removeGoalLog(item.id, level);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已取消 ${_levelEmoji(level)} ${level.label}'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    } else {
+      // Log this level
+      await provider.logGoal(DailyGoalLog(
+        profileId: provider.profile!.id,
+        subItemId: item.id,
+        achieved: level,
+        score: level.points,
+        date: DateTime.now(),
+      ));
+      provider.checkAndUpdateStreak();
+    }
+  }
+
+  String _levelEmoji(GoalLevel l) {
+    switch (l) {
+      case GoalLevel.mini: return '🌱';
+      case GoalLevel.advanced: return '⚡';
+      case GoalLevel.elite: return '🏆';
+    }
+  }
+}
+
+class _LevelButton extends StatelessWidget {
+  final GoalLevel level;
+  final String target;
+  final bool checked;
+  final VoidCallback onToggle;
+  final ThemeData theme;
+
+  const _LevelButton({
+    required this.level,
+    required this.target,
+    required this.checked,
+    required this.onToggle,
+    required this.theme,
+  });
+
+  Color get _color {
+    switch (level) {
+      case GoalLevel.mini: return Colors.blue;
+      case GoalLevel.advanced: return Colors.orange;
+      case GoalLevel.elite: return Colors.green;
+    }
+  }
+
+  String get _emoji {
+    switch (level) {
+      case GoalLevel.mini: return '🌱';
+      case GoalLevel.advanced: return '⚡';
+      case GoalLevel.elite: return '🏆';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onToggle,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            color: checked
+                ? _color.withOpacity(0.15)
+                : theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: checked ? _color : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(_emoji, style: const TextStyle(fontSize: 14)),
+                  const SizedBox(width: 2),
+                  if (checked)
+                    Icon(Icons.check_circle, size: 14, color: _color)
+                  else
+                    Icon(Icons.radio_button_unchecked,
+                        size: 14, color: theme.colorScheme.outlineVariant),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                level.label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: checked ? _color : theme.colorScheme.onSurfaceVariant,
+                  fontWeight: checked ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+              if (target.isNotEmpty)
+                Text(
+                  target,
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+            ],
+          ),
         ),
       ),
     );

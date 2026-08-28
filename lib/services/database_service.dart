@@ -6,6 +6,7 @@ import '../models/meal.dart';
 import '../models/goal.dart';
 import '../models/diary_entry.dart';
 import '../models/character.dart';
+import '../models/chat_message.dart';
 
 class DatabaseService {
   static Database? _db;
@@ -17,10 +18,36 @@ class DatabaseService {
 
   static Future<Database> _open() async {
     final path = join(await getDatabasesPath(), 'time_machine.db');
-    return openDatabase(path, version: 1, onCreate: _onCreate);
+    return openDatabase(path, version: 2, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   static Future<void> _onCreate(Database db, int version) async {
+    await _createAllTables(db);
+  }
+
+  static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS character_chats (
+          id TEXT PRIMARY KEY,
+          profileId TEXT NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          timestamp TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS knowledge_cache (
+          date TEXT NOT NULL,
+          idx INTEGER NOT NULL,
+          data TEXT NOT NULL,
+          PRIMARY KEY (date, idx)
+        )
+      ''');
+    }
+  }
+
+  static Future<void> _createAllTables(Database db) async {
     await db.execute('''
       CREATE TABLE profiles (
         id TEXT PRIMARY KEY,
@@ -46,6 +73,8 @@ class DatabaseService {
       CREATE TABLE goal_logs (
         id TEXT PRIMARY KEY,
         profileId TEXT NOT NULL,
+        subItemId TEXT NOT NULL,
+        level TEXT NOT NULL,
         date TEXT NOT NULL,
         data TEXT NOT NULL
       )
@@ -86,6 +115,23 @@ class DatabaseService {
         correct INTEGER NOT NULL,
         answeredAt TEXT NOT NULL,
         PRIMARY KEY (profileId, questionId)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE character_chats (
+        id TEXT PRIMARY KEY,
+        profileId TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        timestamp TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE knowledge_cache (
+        date TEXT NOT NULL,
+        idx INTEGER NOT NULL,
+        data TEXT NOT NULL,
+        PRIMARY KEY (date, idx)
       )
     ''');
   }
@@ -192,12 +238,32 @@ class DatabaseService {
 
   static Future<void> insertGoalLog(DailyGoalLog log) async {
     final d = await db;
+    // Delete existing log for same subItem+level+day before inserting
+    final start = DateTime(log.date.year, log.date.month, log.date.day);
+    final end = start.add(const Duration(days: 1));
+    await d.delete('goal_logs',
+        where: 'profileId = ? AND subItemId = ? AND level = ? AND date >= ? AND date < ?',
+        whereArgs: [log.profileId, log.subItemId, log.achieved.name,
+            start.toIso8601String(), end.toIso8601String()]);
     await d.insert('goal_logs', {
       'id': log.id,
       'profileId': log.profileId,
+      'subItemId': log.subItemId,
+      'level': log.achieved.name,
       'date': log.date.toIso8601String(),
       'data': jsonEncode(log.toMap()),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> deleteGoalLog(String profileId, String subItemId,
+      GoalLevel level, DateTime day) async {
+    final d = await db;
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    await d.delete('goal_logs',
+        where: 'profileId = ? AND subItemId = ? AND level = ? AND date >= ? AND date < ?',
+        whereArgs: [profileId, subItemId, level.name,
+            start.toIso8601String(), end.toIso8601String()]);
   }
 
   static Future<List<DailyGoalLog>> getLogsForDay(String profileId, DateTime day) async {
@@ -304,6 +370,65 @@ class DatabaseService {
     await d.insert('character_appearance',
         {'profileId': profileId, 'data': jsonEncode(a.toMap())},
         conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  // ── Character Chat ────────────────────────────────────────────
+
+  static Future<void> saveChatMessage(CharacterChatMessage msg) async {
+    final d = await db;
+    await d.insert('character_chats', {
+      'id': msg.id,
+      'profileId': msg.profileId,
+      'role': msg.role,
+      'content': msg.content,
+      'timestamp': msg.timestamp.toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<List<CharacterChatMessage>> getChatHistory(
+      String profileId, {int limit = 50}) async {
+    final d = await db;
+    final rows = await d.query('character_chats',
+        where: 'profileId = ?', whereArgs: [profileId],
+        orderBy: 'timestamp ASC', limit: limit);
+    return rows.map((r) => CharacterChatMessage(
+      id: r['id'] as String,
+      profileId: r['profileId'] as String,
+      role: r['role'] as String,
+      content: r['content'] as String,
+      timestamp: DateTime.parse(r['timestamp'] as String),
+    )).toList();
+  }
+
+  static Future<void> clearChatHistory(String profileId) async {
+    final d = await db;
+    await d.delete('character_chats', where: 'profileId = ?', whereArgs: [profileId]);
+  }
+
+  static Future<int> getChatMessageCount(String profileId) async {
+    final d = await db;
+    final result = await d.rawQuery(
+        'SELECT COUNT(*) as cnt FROM character_chats WHERE profileId = ?', [profileId]);
+    return (result.first['cnt'] as int?) ?? 0;
+  }
+
+  // ── Knowledge Cache ───────────────────────────────────────────
+
+  static Future<void> saveKnowledgeCache(String date, int idx,
+      Map<String, dynamic> data) async {
+    final d = await db;
+    await d.insert('knowledge_cache', {
+      'date': date,
+      'idx': idx,
+      'data': jsonEncode(data),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<List<Map<String, dynamic>>> getKnowledgeCache(String date) async {
+    final d = await db;
+    final rows = await d.query('knowledge_cache',
+        where: 'date = ?', whereArgs: [date], orderBy: 'idx ASC');
+    return rows.map((r) => jsonDecode(r['data'] as String) as Map<String, dynamic>).toList();
   }
 
   // ── Shop / Inventory ──────────────────────────────────────────
