@@ -17,6 +17,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
   bool _extracting = false;
   List<String> _todos = [];
   bool _saved = false;
+  String? _completeError;
 
   @override
   void initState() {
@@ -99,9 +100,19 @@ class _DiaryScreenState extends State<DiaryScreen> {
                 ),
               ],
             ),
+            if (_completeError != null) ...[
+              const SizedBox(height: 4),
+              Text(_completeError!,
+                  style: TextStyle(
+                      fontSize: 12, color: theme.colorScheme.error)),
+            ],
             if (_todos.isNotEmpty) ...[
               const SizedBox(height: 8),
-              _TodosCard(todos: _todos, theme: theme),
+              _TodosBlock(
+                todos: _todos,
+                theme: theme,
+                onRemove: (i) => setState(() => _todos.removeAt(i)),
+              ),
             ],
             const SizedBox(height: 12),
             FilledButton(
@@ -116,12 +127,18 @@ class _DiaryScreenState extends State<DiaryScreen> {
 
   Future<void> _aiComplete(AppProvider provider) async {
     if (_ctrl.text.trim().isEmpty) return;
-    setState(() => _completing = true);
+    setState(() { _completing = true; _completeError = null; });
     try {
       final completion = await provider.completeDiary(_ctrl.text);
-      _ctrl.text = _ctrl.text + completion;
-      _ctrl.selection = TextSelection.fromPosition(
-          TextPosition(offset: _ctrl.text.length));
+      if (completion.isNotEmpty) {
+        _ctrl.text = _ctrl.text + completion;
+        _ctrl.selection = TextSelection.fromPosition(
+            TextPosition(offset: _ctrl.text.length));
+      } else {
+        setState(() => _completeError = 'AI 補完暫時無法使用，請稍後再試');
+      }
+    } catch (_) {
+      setState(() => _completeError = 'AI 補完失敗，請檢查網路後再試');
     } finally {
       setState(() => _completing = false);
     }
@@ -158,40 +175,79 @@ class _DiaryScreenState extends State<DiaryScreen> {
   }
 }
 
-class _TodosCard extends StatelessWidget {
+class _TodosBlock extends StatelessWidget {
   final List<String> todos;
   final ThemeData theme;
-  const _TodosCard({required this.todos, required this.theme});
+  final void Function(int) onRemove;
+
+  const _TodosBlock({
+    required this.todos,
+    required this.theme,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: theme.colorScheme.secondaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('AI 提取的待辦事項',
-                style: theme.textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSecondaryContainer)),
-            const SizedBox(height: 8),
-            ...todos.map((t) => Row(
-              children: [
-                Icon(Icons.circle, size: 6,
-                    color: theme.colorScheme.onSecondaryContainer),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(t,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSecondaryContainer)),
-                ),
-              ],
-            )),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 6),
+          child: Text(
+            '✅ AI 提取的待辦事項',
+            style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary),
+          ),
         ),
-      ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: List.generate(todos.length, (i) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.secondaryContainer,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: theme.colorScheme.secondary.withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_box_outline_blank,
+                      size: 14,
+                      color: theme.colorScheme.onSecondaryContainer),
+                  const SizedBox(width: 6),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                        maxWidth: MediaQuery.of(context).size.width * 0.55),
+                    child: Text(
+                      todos[i],
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSecondaryContainer),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  InkWell(
+                    onTap: () => onRemove(i),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(Icons.close,
+                          size: 14,
+                          color: theme.colorScheme.onSecondaryContainer
+                              .withOpacity(0.6)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ),
+      ],
     );
   }
 }

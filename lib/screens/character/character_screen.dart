@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -58,44 +59,433 @@ class _CharacterScreenState extends State<CharacterScreen>
   Future<void> _generateImage(AppProvider provider) async {
     setState(() => _generatingImage = true);
     try {
-      Uint8List? bytes;
+      final character = provider.character;
+      final profile = provider.profile;
+      if (character == null || profile == null) return;
 
-      // Try Gemini image generation first (uses existing Gemini key)
-      bytes = await provider.generateCharacterImageWithGemini();
+      final isMirror = profile.characterMode == CharacterMode.mirror;
+      final gender = isMirror ? (profile.mirrorGender ?? '她') : profile.sex;
 
-      // Fall back to OpenAI DALL-E if Gemini failed and user has key
-      if (bytes == null) {
-        final openAI = provider.openAI;
-        if (openAI != null) {
-          final profile = provider.profile!;
-          final character = provider.character!;
-          final isMirror = profile.characterMode == CharacterMode.mirror;
-          bytes = await openAI.generateCharacterImage(
-            gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
-            bodyGoal: profile.goal.name,
-            isMirror: isMirror,
-            style: 'anime',
-            appearance: character,
-            muscleLevel: character.muscleLevel,
-            fatLevel: character.fatLevel,
-          );
-        }
-      }
-
+      final bytes = await _renderLocalAvatar(character, gender);
       if (bytes != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_imageCacheKey, base64Encode(bytes));
         if (mounted) setState(() => _characterImage = bytes);
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⚠️ 圖片生成失敗，請稍後再試（Gemini 圖片功能需要支援的 API 配額）'),
-            duration: Duration(seconds: 4),
-          ),
-        );
       }
     } finally {
       if (mounted) setState(() => _generatingImage = false);
+    }
+  }
+
+  Future<Uint8List?> _renderLocalAvatar(
+      CharacterAppearance character, String gender) async {
+    const w = 360.0;
+    const h = 480.0;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, w, h));
+    _paintAvatar(canvas, const Size(w, h), character, gender);
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(w.toInt(), h.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    return byteData?.buffer.asUint8List();
+  }
+
+  void _paintAvatar(
+      Canvas canvas, Size size, CharacterAppearance character, String gender) {
+    final w = size.width;
+    final h = size.height;
+    final isGirl = gender == '她' || gender == '女';
+
+    final skinColor = _skinColor(character.skinTone);
+    final hairColor = _hairColor(character.hairColor);
+    final outfitColor = _outfitColor(character.outfitId);
+
+    // Background gradient
+    final bgPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          outfitColor.withOpacity(0.2),
+          hairColor.withOpacity(0.08),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, w, h));
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, w, h),
+          const Radius.circular(20)),
+      bgPaint,
+    );
+
+    // Outfit body (lower portion)
+    final outfitPaint = Paint()..color = outfitColor;
+    final bodyPath = Path()
+      ..moveTo(0, h * 0.88)
+      ..lineTo(w * 0.14, h * 0.73)
+      ..quadraticBezierTo(w * 0.5, h * 0.66, w * 0.86, h * 0.73)
+      ..lineTo(w, h * 0.88)
+      ..lineTo(w, h)
+      ..lineTo(0, h)
+      ..close();
+    canvas.drawPath(bodyPath, outfitPaint);
+
+    // Collar shadow
+    final collarShadow = Paint()
+      ..color = outfitColor.withOpacity(0.5);
+    canvas.drawRect(
+        Rect.fromLTWH(w * 0.43, h * 0.59, w * 0.14, h * 0.1), collarShadow);
+
+    // Neck (skin)
+    final skinPaint = Paint()..color = skinColor;
+    canvas.drawRect(
+        Rect.fromLTWH(w * 0.44, h * 0.55, w * 0.12, h * 0.14), skinPaint);
+
+    // Back hair layer
+    _drawBackHair(canvas, w, h, character.hairStyle, Paint()..color = hairColor);
+
+    // Head
+    canvas.drawOval(
+      Rect.fromCenter(
+          center: Offset(w * 0.5, h * 0.37), width: w * 0.5, height: h * 0.38),
+      skinPaint,
+    );
+
+    // Ears
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(w * 0.245, h * 0.39),
+            width: w * 0.065,
+            height: h * 0.055),
+        skinPaint);
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(w * 0.755, h * 0.39),
+            width: w * 0.065,
+            height: h * 0.055),
+        skinPaint);
+
+    // Front hair
+    _drawFrontHair(
+        canvas, w, h, character.hairStyle, Paint()..color = hairColor, isGirl);
+
+    // Eyes (white sclera)
+    final white = Paint()..color = Colors.white;
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(w * 0.37, h * 0.375),
+            width: w * 0.1,
+            height: h * 0.072),
+        white);
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(w * 0.63, h * 0.375),
+            width: w * 0.1,
+            height: h * 0.072),
+        white);
+
+    // Iris
+    final iris = Paint()..color = const Color(0xFF3A6B8A);
+    canvas.drawCircle(Offset(w * 0.37, h * 0.378), w * 0.038, iris);
+    canvas.drawCircle(Offset(w * 0.63, h * 0.378), w * 0.038, iris);
+
+    // Pupil
+    final pupil = Paint()..color = const Color(0xFF0D1B2A);
+    canvas.drawCircle(Offset(w * 0.37, h * 0.38), w * 0.025, pupil);
+    canvas.drawCircle(Offset(w * 0.63, h * 0.38), w * 0.025, pupil);
+
+    // Eye shine
+    final shine = Paint()..color = Colors.white;
+    canvas.drawCircle(Offset(w * 0.375, h * 0.37), w * 0.01, shine);
+    canvas.drawCircle(Offset(w * 0.635, h * 0.37), w * 0.01, shine);
+
+    // Eyelashes (top)
+    final lashPaint = Paint()
+      ..color = const Color(0xFF1A1A2E)
+      ..strokeWidth = 1.8
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+        Rect.fromCenter(
+            center: Offset(w * 0.37, h * 0.377),
+            width: w * 0.12,
+            height: h * 0.085),
+        3.5,
+        2.4,
+        false,
+        lashPaint..strokeWidth = 2.2);
+    canvas.drawArc(
+        Rect.fromCenter(
+            center: Offset(w * 0.63, h * 0.377),
+            width: w * 0.12,
+            height: h * 0.085),
+        0.3,
+        2.4,
+        false,
+        lashPaint);
+
+    // Eyebrows
+    final browPaint = Paint()
+      ..color = hairColor.withOpacity(0.9)
+      ..strokeWidth = 2.2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(w * 0.315, h * 0.325), Offset(w * 0.42, h * 0.316),
+        browPaint);
+    canvas.drawLine(Offset(w * 0.58, h * 0.316), Offset(w * 0.685, h * 0.325),
+        browPaint);
+
+    // Nose (subtle)
+    final nosePaint = Paint()
+      ..color = skinColor.withOpacity(0.0)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    // Tiny nostril dots
+    canvas.drawCircle(Offset(w * 0.477, h * 0.44), 1.8,
+        Paint()..color = skinColor.withAlpha(120));
+    canvas.drawCircle(Offset(w * 0.523, h * 0.44), 1.8,
+        Paint()..color = skinColor.withAlpha(120));
+
+    // Blush cheeks
+    final blush = Paint()..color = const Color(0xFFFFB3C1).withOpacity(0.38);
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(w * 0.275, h * 0.425),
+            width: w * 0.16,
+            height: h * 0.065),
+        blush);
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(w * 0.725, h * 0.425),
+            width: w * 0.16,
+            height: h * 0.065),
+        blush);
+
+    // Mouth / smile
+    final lipColor =
+        isGirl ? const Color(0xFFE87B8C) : const Color(0xFFD96B6B);
+    final smilePaint = Paint()
+      ..color = lipColor
+      ..strokeWidth = 2.2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final smilePath = Path()
+      ..moveTo(w * 0.43, h * 0.48)
+      ..quadraticBezierTo(w * 0.5, h * 0.525, w * 0.57, h * 0.48);
+    canvas.drawPath(smilePath, smilePaint);
+
+    // Upper lip line
+    final lipLine = Paint()
+      ..color = lipColor.withOpacity(0.5)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(
+        Offset(w * 0.455, h * 0.477), Offset(w * 0.5, h * 0.47), lipLine);
+    canvas.drawLine(
+        Offset(w * 0.545, h * 0.477), Offset(w * 0.5, h * 0.47), lipLine);
+  }
+
+  Color _skinColor(SkinTone? tone) {
+    switch (tone) {
+      case SkinTone.light:
+        return const Color(0xFFFFF0E6);
+      case SkinTone.medium:
+        return const Color(0xFFF4C99A);
+      case SkinTone.tan:
+        return const Color(0xFFD4956A);
+      case SkinTone.dark:
+        return const Color(0xFF8B5E3C);
+      case null:
+        return const Color(0xFFF4C99A);
+    }
+  }
+
+  Color _hairColor(HairColor? color) {
+    switch (color) {
+      case HairColor.black:
+        return const Color(0xFF1A1A1A);
+      case HairColor.brown:
+        return const Color(0xFF5C3A1E);
+      case HairColor.blonde:
+        return const Color(0xFFE8C84A);
+      case HairColor.red:
+        return const Color(0xFFC0392B);
+      case HairColor.gray:
+        return const Color(0xFFB0B0B0);
+      case HairColor.fantasy:
+        return const Color(0xFF8B5CF6);
+      case null:
+        return const Color(0xFF1A1A1A);
+    }
+  }
+
+  Color _outfitColor(String? outfitId) {
+    const map = {
+      'school_uniform': Color(0xFF4A90D9),
+      'casual_tshirt': Color(0xFF5BA85A),
+      'sporty': Color(0xFFE55A2B),
+      'formal': Color(0xFF2C3E50),
+      'traditional': Color(0xFFC0392B),
+      'hoodie': Color(0xFF8B7BC8),
+      'dress': Color(0xFFE91E8C),
+      'suit': Color(0xFF34495E),
+    };
+    return map[outfitId] ?? const Color(0xFF7E57C2);
+  }
+
+  void _drawBackHair(Canvas canvas, double w, double h, HairStyle? style,
+      Paint paint) {
+    switch (style ?? HairStyle.medium) {
+      case HairStyle.long:
+      case HairStyle.ponytail:
+        canvas.drawRRect(
+          RRect.fromRectAndCorners(
+            Rect.fromLTWH(w * 0.14, h * 0.22, w * 0.13, h * 0.42),
+            bottomLeft: const Radius.circular(14),
+            bottomRight: const Radius.circular(14),
+          ),
+          paint,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndCorners(
+            Rect.fromLTWH(w * 0.73, h * 0.22, w * 0.13, h * 0.42),
+            bottomLeft: const Radius.circular(14),
+            bottomRight: const Radius.circular(14),
+          ),
+          paint,
+        );
+        break;
+      case HairStyle.curly:
+        canvas.drawCircle(Offset(w * 0.22, h * 0.44), w * 0.1, paint);
+        canvas.drawCircle(Offset(w * 0.78, h * 0.44), w * 0.1, paint);
+        break;
+      default:
+        break;
+    }
+  }
+
+  void _drawFrontHair(Canvas canvas, double w, double h, HairStyle? style,
+      Paint paint, bool isGirl) {
+    switch (style ?? HairStyle.medium) {
+      case HairStyle.short:
+        final path = Path()
+          ..moveTo(w * 0.24, h * 0.28)
+          ..quadraticBezierTo(w * 0.5, h * 0.1, w * 0.76, h * 0.28)
+          ..quadraticBezierTo(w * 0.68, h * 0.16, w * 0.5, h * 0.14)
+          ..quadraticBezierTo(w * 0.32, h * 0.16, w * 0.24, h * 0.28);
+        canvas.drawPath(path, paint);
+        canvas.drawOval(
+            Rect.fromCenter(
+                center: Offset(w * 0.255, h * 0.33),
+                width: w * 0.1,
+                height: h * 0.11),
+            paint);
+        canvas.drawOval(
+            Rect.fromCenter(
+                center: Offset(w * 0.745, h * 0.33),
+                width: w * 0.1,
+                height: h * 0.11),
+            paint);
+        break;
+      case HairStyle.medium:
+        canvas.drawOval(
+          Rect.fromCenter(
+              center: Offset(w * 0.5, h * 0.19),
+              width: w * 0.62,
+              height: h * 0.22),
+          paint,
+        );
+        canvas.drawOval(
+            Rect.fromCenter(
+                center: Offset(w * 0.255, h * 0.36),
+                width: w * 0.13,
+                height: h * 0.17),
+            paint);
+        canvas.drawOval(
+            Rect.fromCenter(
+                center: Offset(w * 0.745, h * 0.36),
+                width: w * 0.13,
+                height: h * 0.17),
+            paint);
+        break;
+      case HairStyle.long:
+        canvas.drawOval(
+          Rect.fromCenter(
+              center: Offset(w * 0.5, h * 0.19),
+              width: w * 0.62,
+              height: h * 0.22),
+          paint,
+        );
+        canvas.drawOval(
+            Rect.fromCenter(
+                center: Offset(w * 0.23, h * 0.37),
+                width: w * 0.16,
+                height: h * 0.22),
+            paint);
+        canvas.drawOval(
+            Rect.fromCenter(
+                center: Offset(w * 0.77, h * 0.37),
+                width: w * 0.16,
+                height: h * 0.22),
+            paint);
+        break;
+      case HairStyle.bun:
+        canvas.drawOval(
+          Rect.fromCenter(
+              center: Offset(w * 0.5, h * 0.2),
+              width: w * 0.6,
+              height: h * 0.21),
+          paint,
+        );
+        // Bun
+        canvas.drawCircle(Offset(w * 0.5, h * 0.09), w * 0.13, paint);
+        canvas.drawOval(
+            Rect.fromCenter(
+                center: Offset(w * 0.26, h * 0.35),
+                width: w * 0.1,
+                height: h * 0.14),
+            paint);
+        canvas.drawOval(
+            Rect.fromCenter(
+                center: Offset(w * 0.74, h * 0.35),
+                width: w * 0.1,
+                height: h * 0.14),
+            paint);
+        break;
+      case HairStyle.ponytail:
+        canvas.drawOval(
+          Rect.fromCenter(
+              center: Offset(w * 0.5, h * 0.19),
+              width: w * 0.6,
+              height: h * 0.22),
+          paint,
+        );
+        // Ponytail
+        final tail = Path()
+          ..moveTo(w * 0.68, h * 0.24)
+          ..quadraticBezierTo(w * 0.88, h * 0.35, w * 0.76, h * 0.56)
+          ..quadraticBezierTo(w * 0.72, h * 0.36, w * 0.62, h * 0.27);
+        canvas.drawPath(tail, paint);
+        canvas.drawOval(
+            Rect.fromCenter(
+                center: Offset(w * 0.25, h * 0.36),
+                width: w * 0.11,
+                height: h * 0.16),
+            paint);
+        break;
+      case HairStyle.curly:
+        canvas.drawOval(
+          Rect.fromCenter(
+              center: Offset(w * 0.5, h * 0.19),
+              width: w * 0.66,
+              height: h * 0.24),
+          paint,
+        );
+        canvas.drawCircle(Offset(w * 0.22, h * 0.34), w * 0.1, paint);
+        canvas.drawCircle(Offset(w * 0.78, h * 0.34), w * 0.1, paint);
+        canvas.drawCircle(Offset(w * 0.21, h * 0.43), w * 0.08, paint);
+        canvas.drawCircle(Offset(w * 0.79, h * 0.43), w * 0.08, paint);
+        break;
     }
   }
 
@@ -633,7 +1023,7 @@ class _PlaceholderCharacter extends StatelessWidget {
           if (!compact) ...[
             const SizedBox(height: 12),
             Text(
-              '點擊 ✨\nAI 生成圖片',
+              '點擊 ✨\n生成角色圖',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant),

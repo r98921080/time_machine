@@ -324,7 +324,13 @@ class AppProvider extends ChangeNotifier {
 
   Future<String> completeDiary(String content) async {
     if (_gemini == null) return '（請設定 API Key 後使用 AI 補完功能）';
-    return await _gemini!.completeDiary(content, _profile!.nickname);
+    try {
+      return await _gemini!
+          .completeDiary(content, _profile!.nickname)
+          .timeout(const Duration(seconds: 15));
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<List<String>> extractTodos(String content) async {

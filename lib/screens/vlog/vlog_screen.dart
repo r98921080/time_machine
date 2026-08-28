@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/diary_entry.dart';
 import '../../providers/app_provider.dart';
@@ -129,6 +128,15 @@ class _VlogCard extends StatelessWidget {
 
   const _VlogCard({required this.vlog, required this.theme});
 
+  static const _weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+
+  static String _formatDate(DateTime d) {
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    final wd = _weekdays[d.weekday % 7];
+    return '$m/$day（$wd）';
+  }
+
   Color _tagColor(String tag) {
     switch (tag) {
       case '卓越': return Colors.green;
@@ -164,7 +172,7 @@ class _VlogCard extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  DateFormat('MM/dd (E)', 'zh_TW').format(vlog.date),
+                  _formatDate(vlog.date),
                   style: theme.textTheme.titleSmall
                       ?.copyWith(fontWeight: FontWeight.bold),
                 ),

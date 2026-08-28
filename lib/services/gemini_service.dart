@@ -218,6 +218,37 @@ $characterName：''';
       final text = response.text?.trim();
       if (text != null && text.isNotEmpty) return text;
     } catch (_) {}
+    return _contextualFallback(userMessage, characterName);
+  }
+
+  String _contextualFallback(String msg, String name) {
+    final lower = msg;
+    // Question
+    if (lower.contains('嗎') || lower.contains('？') || lower.contains('?') ||
+        lower.contains('什麼') || lower.contains('為什麼') || lower.contains('怎麼') || lower.contains('如何')) {
+      final q = [
+        '這個問題問得好，讓我想想…你覺得呢？',
+        '哇，你真的很會問問題耶。',
+        '嗯…這個我還沒想過，說說你的看法？',
+        '好問題！其實我自己也不太確定。',
+      ];
+      return q[lower.length % q.length];
+    }
+    // Negative emotion
+    if (lower.contains('煩') || lower.contains('難過') || lower.contains('差') ||
+        lower.contains('失敗') || lower.contains('不行') || lower.contains('糟')) {
+      final neg = [
+        '聽起來你今天不太好受…說說看，發生什麼事了？',
+        '這樣啊，感覺你有點不順。我在這裡，說吧。',
+        '哎，辛苦你了。想聊嗎？',
+      ];
+      return neg[lower.length % neg.length];
+    }
+    // Greetings
+    if (lower.contains('你好') || lower.contains('嗨') || lower.contains('hey') || lower == '哈') {
+      return '嗨！你來了喔，今天怎麼樣？';
+    }
+    // Default - varied
     return _chatFallbacks[DateTime.now().second % _chatFallbacks.length];
   }
 
@@ -321,16 +352,26 @@ $characterName：''';
 
   List<String> _fallbackSubCategories(String category) {
     const defaults = {
-      '運動': ['跑步', '重訓', '游泳', '球類', '瑜伽', '騎腳踏車'],
-      '飲食': ['蔬果攝取', '蛋白質', '減糖', '少油', '補水', '早餐'],
-      '睡眠': ['早睡', '睡眠品質', '午休', '規律作息'],
-      '學習': ['閱讀', '語言', '專業課程', '技能練習', '筆記整理'],
-      '心理': ['冥想', '感恩練習', '日記', '情緒記錄', '社交'],
+      '運動': ['跑步', '重訓', '游泳', '球類', '瑜伽', '騎腳踏車', '拳擊', '爬山'],
+      '飲食': ['蔬果攝取', '蛋白質補充', '減糖', '少油烹調', '多喝水', '吃早餐', '減少外食', '均衡飲食'],
+      '睡眠': ['早睡早起', '睡眠品質', '規律作息', '戒睡前手機', '午休'],
+      '學習': ['閱讀', '語言學習', '專業課程', '技能練習', '筆記整理', '線上課程'],
+      '心理': ['冥想', '感恩練習', '情緒日記', '社交活動', '正念練習', '寫日記'],
+      '工作': ['每日任務規劃', '專注時段', '文件整理', '技能升級', '溝通管理', '會議效率'],
+      '創作': ['繪畫', '寫作', '音樂練習', '攝影', '手工藝', '設計', '拍影片', '寫歌'],
+      '生活': ['整理家務', '理財記帳', '旅行計畫', '學烹飪', '環保習慣', '興趣培養'],
+      '烹飪': ['中式料理', '日式料理', '烘焙甜點', '健康輕食', '備餐規劃', '刀工練習'],
+      '財務': ['每日記帳', '存款目標', '投資學習', '節省開支', '副業計畫'],
+      '社交': ['聯繫舊友', '參加活動', '拓展人脈', '家人互動'],
+      '健康': ['定期檢查', '補充維生素', '健走', '戒菸戒酒', '保持水分'],
+      '語言': ['英文口說', '日文學習', '詞彙練習', '聽力訓練', '閱讀外文'],
+      '閱讀': ['每日讀書', '閱讀筆記', '書評撰寫', '書單規劃'],
     };
     for (final key in defaults.keys) {
       if (category.contains(key)) return defaults[key]!;
     }
-    return ['項目A', '項目B', '項目C', '項目D'];
+    // Generic but useful fallback (never "項目A/B/C/D")
+    return ['每日練習', '技能提升', '習慣培養', '成效記錄', '目標設定'];
   }
 
   Future<Map<String, List<String>>?> generateGoalTargets(
