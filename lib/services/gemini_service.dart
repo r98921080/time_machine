@@ -159,6 +159,78 @@ $diaryContent
     return response.text ?? '你今天很棒，繼續保持！';
   }
 
+  // ── Goal AI Suggestions ───────────────────────────────────────
+
+  Future<List<String>> suggestGoalSubCategories(String category) async {
+    final prompt = '''使用者想設定「$category」類別的目標。
+請列出6-8個常見的子類別選項（簡短，2-6字），例如：
+- 運動 → 跑步、重訓、游泳、球類、瑜伽、騎腳踏車
+只輸出清單，每行一個，不要編號或其他文字。''';
+    try {
+      final res = await _textModel.generateContent([Content.text(prompt)]);
+      final lines = (res.text ?? '').split('\n')
+          .map((l) => l.replaceAll(RegExp(r'^[-•\s]+'), '').trim())
+          .where((l) => l.isNotEmpty)
+          .take(8)
+          .toList();
+      return lines.isNotEmpty ? lines : _fallbackSubCategories(category);
+    } catch (_) {
+      return _fallbackSubCategories(category);
+    }
+  }
+
+  List<String> _fallbackSubCategories(String category) {
+    const defaults = {
+      '運動': ['跑步', '重訓', '游泳', '球類', '瑜伽', '騎腳踏車'],
+      '飲食': ['蔬果攝取', '蛋白質', '減糖', '少油', '補水', '早餐'],
+      '睡眠': ['早睡', '睡眠品質', '午休', '規律作息'],
+      '學習': ['閱讀', '語言', '專業課程', '技能練習', '筆記整理'],
+      '心理': ['冥想', '感恩練習', '日記', '情緒記錄', '社交'],
+    };
+    for (final key in defaults.keys) {
+      if (category.contains(key)) return defaults[key]!;
+    }
+    return ['項目A', '項目B', '項目C', '項目D'];
+  }
+
+  Future<Map<String, List<String>>?> generateGoalTargets(
+      String category, String subCategory) async {
+    final prompt = '''為「$category - $subCategory」生成三個難度層次的具體目標。
+格式（嚴格照以下JSON輸出）：
+{
+  "mini": ["入門目標（容易達到，適合初學者）"],
+  "advanced": ["進階目標（需要努力，有挑戰性）"],
+  "elite": ["精英目標（高標準，需要持續努力）"]
+}
+每個難度只給1個具體目標描述，要有數字或明確標準，例如「每天30分鐘」「每週3次」。
+只輸出JSON。''';
+    try {
+      final res = await _textModel.generateContent([Content.text(prompt)]);
+      final text = (res.text ?? '{}').replaceAll('```json', '').replaceAll('```', '').trim();
+      final decoded = _parseGoalTargets(text);
+      return decoded;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Map<String, List<String>>? _parseGoalTargets(String json) {
+    try {
+      // Simple extraction
+      final mini = RegExp(r'"mini":\s*\["([^"]+)"\]').firstMatch(json)?.group(1);
+      final advanced = RegExp(r'"advanced":\s*\["([^"]+)"\]').firstMatch(json)?.group(1);
+      final elite = RegExp(r'"elite":\s*\["([^"]+)"\]').firstMatch(json)?.group(1);
+      if (mini != null && advanced != null && elite != null) {
+        return {
+          'mini': [mini],
+          'advanced': [advanced],
+          'elite': [elite],
+        };
+      }
+    } catch (_) {}
+    return null;
+  }
+
   // ── Knowledge Question ────────────────────────────────────────
 
   Future<Map<String, String>> generateKnowledgeQuestion(String category) async {

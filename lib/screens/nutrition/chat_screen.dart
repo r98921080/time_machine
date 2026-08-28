@@ -7,7 +7,8 @@ import '../../models/meal.dart';
 import '../../providers/app_provider.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final bool embedded;
+  const ChatScreen({super.key, this.embedded = false});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -35,16 +36,18 @@ class _ChatScreenState extends State<ChatScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('飲食分析'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline),
-            onPressed: () => _showManualAddDialog(context, provider),
-            tooltip: '手動新增',
-          ),
-        ],
-      ),
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              title: const Text('飲食分析'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline),
+                  onPressed: () => _showManualAddDialog(context, provider),
+                  tooltip: '手動新增',
+                ),
+              ],
+            ),
       body: Column(
         children: [
           Expanded(

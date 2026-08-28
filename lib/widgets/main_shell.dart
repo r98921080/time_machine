@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../screens/home/home_screen.dart';
-import '../screens/nutrition/chat_screen.dart';
+import '../screens/record/record_screen.dart';
 import '../screens/goals/goals_screen.dart';
 import '../screens/character/character_screen.dart';
 import '../screens/vlog/vlog_screen.dart';
@@ -17,38 +17,10 @@ class _MainShellState extends State<MainShell> {
 
   static const _screens = [
     HomeScreen(),
-    ChatScreen(),
+    RecordScreen(),
     GoalsScreen(),
     CharacterScreen(),
     VlogScreen(),
-  ];
-
-  static const _items = [
-    BottomNavigationBarItem(
-      icon: Icon(Icons.home_outlined),
-      activeIcon: Icon(Icons.home),
-      label: '首頁',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.restaurant_outlined),
-      activeIcon: Icon(Icons.restaurant),
-      label: '飲食',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.track_changes_outlined),
-      activeIcon: Icon(Icons.track_changes),
-      label: '目標',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.person_outline),
-      activeIcon: Icon(Icons.person),
-      label: '角色',
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.play_circle_outline),
-      activeIcon: Icon(Icons.play_circle),
-      label: 'Vlog',
-    ),
   ];
 
   @override
@@ -58,13 +30,33 @@ class _MainShellState extends State<MainShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (i) => setState(() => _currentIndex = i),
-        destinations: _items
-            .map((item) => NavigationDestination(
-                  icon: item.icon,
-                  selectedIcon: item.activeIcon ?? item.icon,
-                  label: item.label!,
-                ))
-            .toList(),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: '首頁',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.edit_note_outlined),
+            selectedIcon: Icon(Icons.edit_note),
+            label: '記錄',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.track_changes_outlined),
+            selectedIcon: Icon(Icons.track_changes),
+            label: '目標',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: '角色',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.play_circle_outline),
+            selectedIcon: Icon(Icons.play_circle),
+            label: 'Vlog',
+          ),
+        ],
       ),
     );
   }

@@ -4,7 +4,8 @@ import '../../models/diary_entry.dart';
 import '../../providers/app_provider.dart';
 
 class DiaryScreen extends StatefulWidget {
-  const DiaryScreen({super.key});
+  final bool embedded;
+  const DiaryScreen({super.key, this.embedded = false});
 
   @override
   State<DiaryScreen> createState() => _DiaryScreenState();
@@ -36,16 +37,18 @@ class _DiaryScreenState extends State<DiaryScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('今日日記'),
-        actions: [
-          if (_saved)
-            const Padding(
-              padding: EdgeInsets.only(right: 12),
-              child: Icon(Icons.check_circle, color: Colors.green),
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              title: const Text('今日日記'),
+              actions: [
+                if (_saved)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 12),
+                    child: Icon(Icons.check_circle, color: Colors.green),
+                  ),
+              ],
             ),
-        ],
-      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

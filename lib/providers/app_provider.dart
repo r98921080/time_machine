@@ -8,8 +8,10 @@ import '../models/diary_entry.dart';
 import '../models/character.dart';
 import '../services/database_service.dart';
 import '../services/gemini_service.dart';
+import '../services/openai_service.dart';;
 
 const _kApiKey = 'gemini_api_key';
+const _kOpenAIKey = 'openai_api_key';
 const _kDefaultApiKey = '';
 
 enum AppState { loading, onboarding, ready }
@@ -19,6 +21,7 @@ class AppProvider extends ChangeNotifier {
   UserProfile? _profile;
   CharacterAppearance? _character;
   String? _apiKey;
+  String? _openAIKey;
 
   List<Meal> _todayMeals = [];
   List<GoalCategory> _categories = [];
@@ -34,6 +37,13 @@ class AppProvider extends ChangeNotifier {
   UserProfile? get profile => _profile;
   CharacterAppearance? get character => _character;
   String? get apiKey => _apiKey;
+  String? get openAIKey => _openAIKey;
+
+  OpenAIService? get openAI {
+    final key = _openAIKey ?? '';
+    if (key.isEmpty) return null;
+    return OpenAIService(key);
+  }
 
   List<Meal> get todayMeals => _todayMeals;
   List<GoalCategory> get categories => _categories;
@@ -66,6 +76,7 @@ class AppProvider extends ChangeNotifier {
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _apiKey = prefs.getString(_kApiKey);
+    _openAIKey = prefs.getString(_kOpenAIKey);
     _profile = await DatabaseService.getFirstProfile();
     if (_profile == null) {
       _state = AppState.onboarding;
@@ -134,6 +145,22 @@ class AppProvider extends ChangeNotifier {
     await prefs.setString(_kApiKey, key);
     _apiKey = key;
     notifyListeners();
+  }
+
+  Future<void> saveOpenAIKey(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kOpenAIKey, key);
+    _openAIKey = key;
+    notifyListeners();
+  }
+
+  Future<List<String>> suggestGoalSubCategories(String category) async {
+    return await _gemini?.suggestGoalSubCategories(category) ?? [];
+  }
+
+  Future<Map<String, List<String>>?> generateGoalTargets(
+      String category, String subCategory) async {
+    return await _gemini?.generateGoalTargets(category, subCategory);
   }
 
   // ── Chat / Food Analysis ─────────────────────────────────────
