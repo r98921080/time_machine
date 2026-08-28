@@ -295,23 +295,26 @@ class _TargetPreviewCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
-        children: rows.map((r) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 54,
-                child: Text(r.$1,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: r.$3, fontWeight: FontWeight.bold)),
-              ),
-              Expanded(
-                child: Text(r.$2, style: theme.textTheme.bodySmall),
-              ),
-            ],
-          ),
-        )).toList(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: rows.map((r) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 54,
+                  child: Text(r.$1,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          color: r.$3, fontWeight: FontWeight.bold)),
+                ),
+                Expanded(
+                  child: Text(r.$2, style: theme.textTheme.bodySmall),
+                ),
+              ],
+            ),
+          )).toList(),
+        ),
       ),
     );
   }
