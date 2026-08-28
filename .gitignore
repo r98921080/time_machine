@@ -1,1 +1,8 @@
 android/app/google-services.json
+TimeMachine-APK/
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+*.apk
