@@ -35,7 +35,7 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
     final rng = Random();
     final category = _categories[rng.nextInt(_categories.length)];
     try {
-      final raw = await provider._gemini?.generateKnowledgeQuestion(category)
+      final raw = await provider.generateKnowledgeQuestion(category)
           ?? {'raw': '{}'};
       final parsed = jsonDecode(raw['raw'] ?? '{}') as Map<String, dynamic>;
       if (parsed.isNotEmpty) {

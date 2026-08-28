@@ -284,6 +284,12 @@ class AppProvider extends ChangeNotifier {
     _profile = updated;
   }
 
+  // ── Knowledge Quiz ────────────────────────────────────────────
+
+  Future<Map<String, String>?> generateKnowledgeQuestion(String category) async {
+    return await _gemini?.generateKnowledgeQuestion(category);
+  }
+
   // ── Mirror Response ──────────────────────────────────────────
 
   Future<String> getMirrorResponse() async {
