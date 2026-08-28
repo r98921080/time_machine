@@ -30,15 +30,12 @@ jobs:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
 
-      - name: Patch android/build.gradle for Firebase
+      - name: Patch build.gradle.kts for Firebase
         run: |
-          grep -q 'google-services' android/build.gradle || \
-            sed -i '/classpath .com.android.tools.build/a\        classpath '"'"'com.google.gms:google-services:4.4.2'"'"'' android/build.gradle
-
-      - name: Patch android/app/build.gradle for Firebase
-        run: |
-          grep -q 'com.google.gms.google-services' android/app/build.gradle || \
-            echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
+          grep -q 'com.google.gms.google-services' android/build.gradle.kts || \
+            sed -i '/^plugins {/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/build.gradle.kts
+          grep -q 'com.google.gms.google-services' android/app/build.gradle.kts || \
+            sed -i '/^plugins {/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
 
       - name: Write AndroidManifest
         run: |
