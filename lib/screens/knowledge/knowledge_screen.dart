@@ -77,7 +77,7 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
         return;
       }
     } catch (_) {}
-    // Hard fallback
+    // Hard fallback — 10 questions
     setState(() {
       _questions = [
         {
@@ -86,7 +86,7 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
           'wrong1': '1顆',
           'wrong2': '2顆',
           'wrong3': '4顆',
-          'explanation': '章魚有3顆心臟：1顆主心臟負責全身循環，另外2顆鰓心臟負責將血液送往鰓部。',
+          'explanation': '章魚有3顆心臟：1顆主心臟，另外2顆鰓心臟負責將血液送往鰓部進行氣體交換。',
           'category': '動物奇聞',
         },
         {
@@ -95,8 +95,80 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
           'wrong1': '約1千萬步',
           'wrong2': '約5億步',
           'wrong3': '約5千萬步',
-          'explanation': '一般人每天約走8000步，以80年計算，一生約走1億步以上。',
+          'explanation': '一般人每天約走8000步，以80年計算，一生大約走1億步以上。',
           'category': '人體秘密',
+        },
+        {
+          'question': '世界上最重的動物是什麼？',
+          'correct': '藍鯨',
+          'wrong1': '非洲象',
+          'wrong2': '長頸鹿',
+          'wrong3': '河馬',
+          'explanation': '藍鯨是地球上有史以來最重的動物，體重可達200噸，相當於33頭非洲象。',
+          'category': '動物奇聞',
+        },
+        {
+          'question': '人體內大約有多少個細胞？',
+          'correct': '37兆個',
+          'wrong1': '1兆個',
+          'wrong2': '100億個',
+          'wrong3': '10兆個',
+          'explanation': '科學家估計人體約有37.2兆個細胞，這個數字比地球總人口多幾千倍。',
+          'category': '人體秘密',
+        },
+        {
+          'question': '閃電的溫度約是太陽表面的幾倍？',
+          'correct': '約5倍',
+          'wrong1': '等溫',
+          'wrong2': '約0.5倍',
+          'wrong3': '約10倍',
+          'explanation': '閃電表面溫度約30,000K，是太陽表面（約6,000K）的5倍。',
+          'category': '自然科學',
+        },
+        {
+          'question': '蜜蜂一生能採多少蜜？',
+          'correct': '不到1茶匙',
+          'wrong1': '約1公斤',
+          'wrong2': '約1杯',
+          'wrong3': '約500毫升',
+          'explanation': '一隻工蜂一生（約6週）只能採集約1/12茶匙的蜂蜜，是牠們辛勤工作的見證。',
+          'category': '動物奇聞',
+        },
+        {
+          'question': '宇宙中最常見的元素是什麼？',
+          'correct': '氫',
+          'wrong1': '氦',
+          'wrong2': '氧',
+          'wrong3': '碳',
+          'explanation': '氫是宇宙中含量最豐富的元素，約占宇宙質量的75%，是恆星和太陽的主要成分。',
+          'category': '太空宇宙',
+        },
+        {
+          'question': '哪個國家發明了披薩？',
+          'correct': '義大利',
+          'wrong1': '美國',
+          'wrong2': '希臘',
+          'wrong3': '法國',
+          'explanation': '現代披薩起源於18世紀末的義大利那不勒斯，最初是窮人的食物，後來風靡全球。',
+          'category': '食物真相',
+        },
+        {
+          'question': '人類有幾塊骨頭？（成人）',
+          'correct': '206塊',
+          'wrong1': '300塊',
+          'wrong2': '180塊',
+          'wrong3': '250塊',
+          'explanation': '嬰兒出生時有約300塊骨頭，隨著成長逐漸融合，成人最終有206塊骨頭。',
+          'category': '人體秘密',
+        },
+        {
+          'question': '世界上最高的山（從地心算起）是哪座？',
+          'correct': '欽博拉索山',
+          'wrong1': '聖母峰（珠峰）',
+          'wrong2': '乞力馬扎羅山',
+          'wrong3': '麥金利山',
+          'explanation': '由於地球赤道隆起，位於厄瓜多爾的欽博拉索山頂離地心最遠，比珠峰更「高」。',
+          'category': '地理文化',
         },
       ];
       _currentIndex = 0;

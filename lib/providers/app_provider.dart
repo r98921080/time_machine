@@ -183,13 +183,58 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Sub-category in-memory cache (persisted to SharedPreferences)
+  final Map<String, List<String>> _subCatCache = {};
+  static const _kSubCatPrefix = 'subcats_';
+
   Future<List<String>> suggestGoalSubCategories(String category) async {
-    return await _gemini?.suggestGoalSubCategories(category) ?? [];
+    if (_subCatCache.containsKey(category)) return _subCatCache[category]!;
+    // Check SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    final cached = prefs.getString('$_kSubCatPrefix$category');
+    if (cached != null) {
+      try {
+        final list = List<String>.from(jsonDecode(cached) as List);
+        if (list.isNotEmpty) {
+          _subCatCache[category] = list;
+          return list;
+        }
+      } catch (_) {}
+    }
+    // Generate via Gemini
+    final result = await _gemini?.suggestGoalSubCategories(category) ?? [];
+    if (result.isNotEmpty) {
+      _subCatCache[category] = result;
+      await prefs.setString('$_kSubCatPrefix$category', jsonEncode(result));
+    }
+    return result;
   }
 
   Future<Map<String, List<String>>?> generateGoalTargets(
       String category, String subCategory) async {
-    return await _gemini?.generateGoalTargets(category, subCategory);
+    final result = await _gemini?.generateGoalTargets(category, subCategory);
+    if (result != null) return result;
+    // Hardcoded smart fallback
+    return _targetsFallback(subCategory);
+  }
+
+  Map<String, List<String>> _targetsFallback(String sub) {
+    final patterns = <String, Map<String, List<String>>>{
+      '跑步': {'mini': ['每天慢跑15分鐘'], 'advanced': ['每天跑步30分鐘，達5km'], 'elite': ['每週跑步5天，每次8km以上']},
+      '重訓': {'mini': ['每週重訓2次，每次30分鐘'], 'advanced': ['每週重訓4次，每次45分鐘'], 'elite': ['每天重訓，週期計畫且持續12週']},
+      '游泳': {'mini': ['每週游泳1次，500m'], 'advanced': ['每週游泳3次，每次1km'], 'elite': ['每週游泳5次，每次2km以上']},
+      '閱讀': {'mini': ['每天閱讀10分鐘'], 'advanced': ['每天閱讀30分鐘，每月完成1本書'], 'elite': ['每天閱讀1小時，每月讀2本以上']},
+      '冥想': {'mini': ['每天冥想5分鐘'], 'advanced': ['每天冥想20分鐘'], 'elite': ['每天冥想40分鐘，連續90天不中斷']},
+      '睡眠': {'mini': ['每天11點前入睡'], 'advanced': ['每天睡滿7小時，固定作息'], 'elite': ['每天睡滿8小時，睡眠品質分數達90分']},
+    };
+    for (final key in patterns.keys) {
+      if (sub.contains(key)) return patterns[key]!;
+    }
+    return {
+      'mini': ['每天做${sub} 15分鐘'],
+      'advanced': ['每天做${sub} 30分鐘，堅持4週'],
+      'elite': ['每天做${sub} 60分鐘，連續90天達標'],
+    };
   }
 
   // ── Chat / Food Analysis ─────────────────────────────────────

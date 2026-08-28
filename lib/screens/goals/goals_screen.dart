@@ -409,72 +409,193 @@ class _CategoryCard extends StatelessWidget {
   }
 
   void _showAddSubItemDialog(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    final miniCtrl = TextEditingController();
-    final advCtrl = TextEditingController();
-    final eliteCtrl = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    final prov = provider;
-
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text('新增「${category.title}」子項目'),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(labelText: '項目名稱'),
-                    validator: (v) => v?.isEmpty == true ? '請輸入名稱' : null),
+      builder: (_) => _AddSubItemDialog(
+        categoryTitle: category.title,
+        provider: provider,
+        onAdd: (subItem) {
+          final updated = GoalCategory(
+            id: category.id,
+            title: category.title,
+            subItems: [...category.subItems, subItem],
+          );
+          provider.updateCategory(updated);
+        },
+      ),
+    );
+  }
+}
+
+// ── Add Sub-Item Dialog with AI ────────────────────────────────────
+class _AddSubItemDialog extends StatefulWidget {
+  final String categoryTitle;
+  final AppProvider provider;
+  final ValueChanged<GoalSubItem> onAdd;
+
+  const _AddSubItemDialog({
+    required this.categoryTitle,
+    required this.provider,
+    required this.onAdd,
+  });
+
+  @override
+  State<_AddSubItemDialog> createState() => _AddSubItemDialogState();
+}
+
+class _AddSubItemDialogState extends State<_AddSubItemDialog> {
+  final _nameCtrl = TextEditingController();
+  final _miniCtrl = TextEditingController();
+  final _advCtrl = TextEditingController();
+  final _eliteCtrl = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
+  List<String> _aiNameSuggestions = [];
+  bool _loadingNames = false;
+  bool _loadingTargets = false;
+
+  String get _cleanCat => widget.categoryTitle
+      .replaceAll(RegExp(r'[^一-鿿㐀-䶿\w\s]'), '')
+      .trim();
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _miniCtrl.dispose();
+    _advCtrl.dispose();
+    _eliteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _suggestNames() async {
+    setState(() => _loadingNames = true);
+    final names =
+        await widget.provider.suggestGoalSubCategories(_cleanCat);
+    setState(() {
+      _aiNameSuggestions = names;
+      _loadingNames = false;
+    });
+  }
+
+  Future<void> _fillTargets(String name) async {
+    _nameCtrl.text = name;
+    setState(() => _loadingTargets = true);
+    final targets =
+        await widget.provider.generateGoalTargets(_cleanCat, name);
+    if (targets != null && mounted) {
+      _miniCtrl.text = targets['mini']?.first ?? '';
+      _advCtrl.text = targets['advanced']?.first ?? '';
+      _eliteCtrl.text = targets['elite']?.first ?? '';
+    }
+    if (mounted) setState(() => _loadingTargets = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: Text('新增「${widget.categoryTitle}」子項目'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Name field + AI suggest button
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _nameCtrl,
+                      decoration:
+                          const InputDecoration(labelText: '項目名稱'),
+                      validator: (v) =>
+                          v?.isEmpty == true ? '請輸入名稱' : null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _loadingNames
+                      ? const SizedBox(
+                          width: 36,
+                          height: 36,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : IconButton.outlined(
+                          icon: const Icon(Icons.auto_awesome, size: 18),
+                          tooltip: 'AI 建議名稱',
+                          onPressed: _suggestNames,
+                        ),
+                ],
+              ),
+
+              // AI name suggestions chips
+              if (_aiNameSuggestions.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                TextFormField(
-                    controller: miniCtrl,
-                    decoration: const InputDecoration(
-                        labelText: '🌱 入門標準', hintText: '最低要求')),
-                TextFormField(
-                    controller: advCtrl,
-                    decoration: const InputDecoration(
-                        labelText: '⚡ 進階標準', hintText: '有挑戰性')),
-                TextFormField(
-                    controller: eliteCtrl,
-                    decoration: const InputDecoration(
-                        labelText: '🏆 精英標準', hintText: '高標準')),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: _aiNameSuggestions.map((name) {
+                    final selected = _nameCtrl.text == name;
+                    return ActionChip(
+                      label: Text(name,
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: selected
+                                  ? theme.colorScheme.onPrimaryContainer
+                                  : null)),
+                      backgroundColor: selected
+                          ? theme.colorScheme.primaryContainer
+                          : null,
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => _fillTargets(name),
+                    );
+                  }).toList(),
+                ),
               ],
-            ),
+
+              const SizedBox(height: 12),
+
+              // Target fields
+              if (_loadingTargets)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: LinearProgressIndicator(),
+                ),
+              TextFormField(
+                  controller: _miniCtrl,
+                  decoration: const InputDecoration(
+                      labelText: '🌱 入門標準', hintText: '最低要求')),
+              TextFormField(
+                  controller: _advCtrl,
+                  decoration: const InputDecoration(
+                      labelText: '⚡ 進階標準', hintText: '有挑戰性')),
+              TextFormField(
+                  controller: _eliteCtrl,
+                  decoration: const InputDecoration(
+                      labelText: '🏆 精英標準', hintText: '高標準')),
+            ],
           ),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消')),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                final updated = GoalCategory(
-                  id: category.id,
-                  title: category.title,
-                  subItems: [
-                    ...category.subItems,
-                    GoalSubItem(
-                      name: nameCtrl.text.trim(),
-                      miniTarget: miniCtrl.text.trim(),
-                      advancedTarget: advCtrl.text.trim(),
-                      eliteTarget: eliteCtrl.text.trim(),
-                    ),
-                  ],
-                );
-                prov.updateCategory(updated);
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('新增'),
-          ),
-        ],
       ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消')),
+        FilledButton(
+          onPressed: () {
+            if (_formKey.currentState!.validate()) {
+              widget.onAdd(GoalSubItem(
+                name: _nameCtrl.text.trim(),
+                miniTarget: _miniCtrl.text.trim(),
+                advancedTarget: _advCtrl.text.trim(),
+                eliteTarget: _eliteCtrl.text.trim(),
+              ));
+              Navigator.pop(context);
+            }
+          },
+          child: const Text('新增'),
+        ),
+      ],
     );
   }
 }

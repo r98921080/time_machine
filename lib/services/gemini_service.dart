@@ -38,7 +38,7 @@ class GeminiService {
 ''';
 
   Future<String> analyzeFood(String description) async {
-    final response = await _textModel.generateContent([
+    final response = await _gen([
       Content.text('$_foodSystemPrompt\n\n使用者說：$description'),
     ]);
     return response.text ?? '無法分析，請稍後再試。';
@@ -86,7 +86,7 @@ class GeminiService {
 如果是映照模式，從使用者想像中的對象視角加入一句話。
 絕對不要空白回覆，一定要有內容。''';
     try {
-      final response = await _textModel.generateContent([Content.text(prompt)]);
+      final response = await _gen([Content.text(prompt)]);
       final text = response.text?.trim();
       if (text != null && text.isNotEmpty) return text;
     } catch (_) {}
@@ -102,7 +102,7 @@ class GeminiService {
 草稿：$partialContent
 
 補全內容（直接續寫，不要重複草稿）：''';
-    final response = await _textModel.generateContent([Content.text(prompt)]);
+    final response = await _gen([Content.text(prompt)]);
     return response.text ?? '';
   }
 
@@ -114,7 +114,7 @@ class GeminiService {
 $diaryContent
 
 待辦事項（僅列出清單，不要其他文字）：''';
-    final response = await _textModel.generateContent([Content.text(prompt)]);
+    final response = await _gen([Content.text(prompt)]);
     final text = response.text ?? '';
     return text.split('\n').where((l) => l.trim().isNotEmpty).take(5).toList();
   }
@@ -138,11 +138,27 @@ $diaryContent
 3. 具體行動建議（1-2點）
 
 語氣要像朋友，不要太說教。約150字。''';
-    final response = await _textModel.generateContent([Content.text(prompt)]);
+    final response = await _gen([Content.text(prompt)]);
     return response.text ?? '繼續加油！';
   }
 
+  static const _timeout = Duration(seconds: 12);
+
+  Future<GenerateContentResponse> _gen(List<Content> content) =>
+      _textModel.generateContent(content).timeout(_timeout);
+
   // ── Character Chat (with memory) ─────────────────────────────
+
+  static const _chatFallbacks = [
+    '嗯，我在聽你說，繼續呢？',
+    '這樣啊…感覺你今天很有想法耶。',
+    '哈，有意思。你說的讓我想了一下。',
+    '嗯嗯，我有在認真聽。',
+    '原來如此，你繼續說吧。',
+    '好有趣喔，然後呢？',
+    '你這個問題問得好，讓我想想…',
+    '嗯，我也這麼覺得。',
+  ];
 
   Future<String> chatWithCharacter({
     required String characterName,
@@ -198,11 +214,12 @@ ${diaryContent.isNotEmpty ? '- 今日日記：$diaryContent' : ''}
         '\n\n使用者現在說：$userMessage\n\n$characterName 回應（不要說自己的名字）：';
 
     try {
-      final response = await _textModel.generateContent([Content.text(fullPrompt)]);
+      final response = await _gen([Content.text(fullPrompt)]);
       final text = response.text?.trim();
       if (text != null && text.isNotEmpty) return text;
     } catch (_) {}
-    return '嗯，我在聽你說。今天辛苦了，好好休息吧。';
+    // Varied fallback — pick by timestamp to avoid repetition
+    return _chatFallbacks[DateTime.now().second % _chatFallbacks.length];
   }
 
   // ── Character Mirror Response ─────────────────────────────────
@@ -222,7 +239,7 @@ ${diaryContent.isNotEmpty ? '- 今日日記：$diaryContent' : ''}
 對使用者今天的表現（$level）說一句話。
 語氣要自然、有情感，像是真實的人在說話。20-40字即可。
 今天的日記：${diaryContent.isEmpty ? '（沒有寫日記）' : diaryContent}''';
-    final response = await _textModel.generateContent([Content.text(prompt)]);
+    final response = await _gen([Content.text(prompt)]);
     return response.text ?? '你今天很棒，繼續保持！';
   }
 
@@ -234,7 +251,7 @@ ${diaryContent.isNotEmpty ? '- 今日日記：$diaryContent' : ''}
 - 運動 → 跑步、重訓、游泳、球類、瑜伽、騎腳踏車
 只輸出清單，每行一個，不要編號或其他文字。''';
     try {
-      final res = await _textModel.generateContent([Content.text(prompt)]);
+      final res = await _gen([Content.text(prompt)]);
       final lines = (res.text ?? '').split('\n')
           .map((l) => l.replaceAll(RegExp(r'^[-•\s]+'), '').trim())
           .where((l) => l.isNotEmpty)
@@ -272,7 +289,7 @@ ${diaryContent.isNotEmpty ? '- 今日日記：$diaryContent' : ''}
 每個難度只給1個具體目標描述，要有數字或明確標準，例如「每天30分鐘」「每週3次」。
 只輸出JSON。''';
     try {
-      final res = await _textModel.generateContent([Content.text(prompt)]);
+      final res = await _gen([Content.text(prompt)]);
       final text = (res.text ?? '{}').replaceAll('```json', '').replaceAll('```', '').trim();
       final decoded = _parseGoalTargets(text);
       return decoded;
@@ -315,7 +332,7 @@ ${diaryContent.isNotEmpty ? '- 今日日記：$diaryContent' : ''}
 
 只輸出JSON，不要其他文字。''';
     try {
-      final response = await _textModel.generateContent([Content.text(prompt)]);
+      final response = await _gen([Content.text(prompt)]);
       final text = (response.text ?? '').replaceAll('```json', '').replaceAll('```', '').trim();
       final parsed = _parseKnowledgeJson(text);
       if (parsed != null &&

@@ -14,6 +14,21 @@ class VlogScreen extends StatefulWidget {
 class _VlogScreenState extends State<VlogScreen> {
   String _searchQuery = '';
   String? _filterTag;
+  bool _generating = false;
+
+  Future<void> _generate(AppProvider provider, BuildContext context) async {
+    setState(() => _generating = true);
+    try {
+      final ok = await provider.generateTodayVlog();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok ? '✅ 今日 Vlog 已生成！' : '⚠️ 生成失敗，請確認 API Key 設定'),
+        backgroundColor: ok ? Colors.green.shade700 : Colors.orange.shade700,
+      ));
+    } finally {
+      if (mounted) setState(() => _generating = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,32 +81,33 @@ class _VlogScreenState extends State<VlogScreen> {
           ),
         ),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _generating ? null : () => _generate(provider, context),
+        icon: _generating
+            ? const SizedBox(
+                width: 20, height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Icon(Icons.auto_awesome),
+        label: Text(_generating ? '生成中…' : '生成今日 Vlog'),
+        backgroundColor: _generating ? theme.colorScheme.surfaceContainerHighest : null,
+      ),
       body: vlogs.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.video_collection_outlined,
-                      size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      size: 64,
+                      color: theme.colorScheme.primary.withOpacity(0.5)),
                   const SizedBox(height: 16),
-                  const Text('還沒有 Vlog',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('還沒有 Vlog',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  Text('完成今日記錄後，可以生成你的第一個 Vlog',
+                  Text('點擊右下角按鈕，生成今日 Vlog',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: () async {
-                      await provider.generateTodayVlog();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('今日 Vlog 已生成！')));
-                      }
-                    },
-                    icon: const Icon(Icons.auto_awesome),
-                    label: const Text('生成今日 Vlog'),
-                  ),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant)),
                 ],
               ),
             )
