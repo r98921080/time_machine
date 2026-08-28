@@ -507,9 +507,7 @@ class _CategoryCard extends StatelessWidget {
     final advCtrl = TextEditingController();
     final eliteCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    final prov = context.findAncestorStateOfType<State<GoalsScreen>>()?.context
-            .read<AppProvider>() ??
-        provider;
+    final prov = provider;
 
     showDialog(
       context: context,

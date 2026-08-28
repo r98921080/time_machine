@@ -8,7 +8,7 @@ import '../models/diary_entry.dart';
 import '../models/character.dart';
 import '../services/database_service.dart';
 import '../services/gemini_service.dart';
-import '../services/openai_service.dart';;
+import '../services/openai_service.dart';
 
 const _kApiKey = 'gemini_api_key';
 const _kOpenAIKey = 'openai_api_key';
