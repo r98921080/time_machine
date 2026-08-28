@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/diary_entry.dart';
+import '../../models/todo_item.dart';
 import '../../providers/app_provider.dart';
 
 class DiaryScreen extends StatefulWidget {
@@ -15,9 +16,9 @@ class _DiaryScreenState extends State<DiaryScreen> {
   late TextEditingController _ctrl;
   bool _completing = false;
   bool _extracting = false;
-  List<String> _todos = [];
   bool _saved = false;
   String? _completeError;
+  String? _lastDiaryForCompletion;
 
   @override
   void initState() {
@@ -36,6 +37,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final theme = Theme.of(context);
+    final todos = provider.todos;
 
     return Scaffold(
       appBar: widget.embedded
@@ -78,8 +80,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                     onPressed: _completing ? null : () => _aiComplete(provider),
                     icon: _completing
                         ? const SizedBox(
-                            width: 14,
-                            height: 14,
+                            width: 14, height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.auto_fix_high, size: 16),
                     label: const Text('AI 補完'),
@@ -91,8 +92,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                     onPressed: _extracting ? null : () => _extractTodos(provider),
                     icon: _extracting
                         ? const SizedBox(
-                            width: 14,
-                            height: 14,
+                            width: 14, height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.checklist, size: 16),
                     label: const Text('提取待辦'),
@@ -100,18 +100,36 @@ class _DiaryScreenState extends State<DiaryScreen> {
                 ),
               ],
             ),
+            // Error + retry
             if (_completeError != null) ...[
               const SizedBox(height: 4),
-              Text(_completeError!,
-                  style: TextStyle(
-                      fontSize: 12, color: theme.colorScheme.error)),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(_completeError!,
+                        style: TextStyle(
+                            fontSize: 12, color: theme.colorScheme.error)),
+                  ),
+                  if (_lastDiaryForCompletion != null)
+                    TextButton.icon(
+                      icon: const Icon(Icons.refresh, size: 14),
+                      label: const Text('重試'),
+                      style: TextButton.styleFrom(
+                          foregroundColor: theme.colorScheme.error,
+                          padding: const EdgeInsets.symmetric(horizontal: 8)),
+                      onPressed: () => _aiComplete(provider),
+                    ),
+                ],
+              ),
             ],
-            if (_todos.isNotEmpty) ...[
+            // Persistent Todos list
+            if (todos.isNotEmpty) ...[
               const SizedBox(height: 8),
-              _TodosBlock(
-                todos: _todos,
+              _PersistentTodosBlock(
+                todos: todos,
                 theme: theme,
-                onRemove: (i) => setState(() => _todos.removeAt(i)),
+                onToggle: (id) => provider.toggleTodo(id),
+                onRemove: (id) => provider.removeTodo(id),
               ),
             ],
             const SizedBox(height: 12),
@@ -126,19 +144,22 @@ class _DiaryScreenState extends State<DiaryScreen> {
   }
 
   Future<void> _aiComplete(AppProvider provider) async {
-    if (_ctrl.text.trim().isEmpty) return;
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) return;
+    _lastDiaryForCompletion = text;
     setState(() { _completing = true; _completeError = null; });
     try {
-      final completion = await provider.completeDiary(_ctrl.text);
+      final completion = await provider.completeDiary(text);
       if (completion.isNotEmpty) {
         _ctrl.text = _ctrl.text + completion;
         _ctrl.selection = TextSelection.fromPosition(
             TextPosition(offset: _ctrl.text.length));
+        setState(() => _completeError = null);
       } else {
-        setState(() => _completeError = 'AI 補完暫時無法使用，請稍後再試');
+        setState(() => _completeError = 'AI 補完暫時無法使用，請點重試');
       }
-    } catch (_) {
-      setState(() => _completeError = 'AI 補完失敗，請檢查網路後再試');
+    } catch (e) {
+      setState(() => _completeError = 'AI 補完失敗，請確認網路後點重試');
     } finally {
       setState(() => _completing = false);
     }
@@ -149,7 +170,13 @@ class _DiaryScreenState extends State<DiaryScreen> {
     setState(() => _extracting = true);
     try {
       final todos = await provider.extractTodos(_ctrl.text);
-      setState(() => _todos = todos);
+      if (todos.isNotEmpty) {
+        await provider.addTodos(todos);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已新增 ${todos.length} 個待辦事項')));
+        }
+      }
     } finally {
       setState(() => _extracting = false);
     }
@@ -175,79 +202,116 @@ class _DiaryScreenState extends State<DiaryScreen> {
   }
 }
 
-class _TodosBlock extends StatelessWidget {
-  final List<String> todos;
+class _PersistentTodosBlock extends StatelessWidget {
+  final List<TodoItem> todos;
   final ThemeData theme;
-  final void Function(int) onRemove;
+  final void Function(String) onToggle;
+  final void Function(String) onRemove;
 
-  const _TodosBlock({
+  const _PersistentTodosBlock({
     required this.todos,
     required this.theme,
+    required this.onToggle,
     required this.onRemove,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Show undone first, then done (greyed out)
+    final undone = todos.where((t) => !t.done).toList();
+    final done = todos.where((t) => t.done).toList();
+    final ordered = [...undone, ...done];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 2, bottom: 6),
+          padding: const EdgeInsets.only(left: 2, bottom: 8),
           child: Text(
-            '✅ AI 提取的待辦事項',
+            '✅ 待辦事項',
             style: theme.textTheme.labelMedium?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: theme.colorScheme.primary),
           ),
         ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: List.generate(todos.length, (i) {
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.secondaryContainer,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: theme.colorScheme.secondary.withOpacity(0.3),
+        ...ordered.map((todo) => _TodoRow(
+              todo: todo,
+              theme: theme,
+              onToggle: () => onToggle(todo.id),
+              onRemove: () => onRemove(todo.id),
+            )),
+      ],
+    );
+  }
+}
+
+class _TodoRow extends StatelessWidget {
+  final TodoItem todo;
+  final ThemeData theme;
+  final VoidCallback onToggle;
+  final VoidCallback onRemove;
+
+  const _TodoRow({
+    required this.todo,
+    required this.theme,
+    required this.onToggle,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: todo.done
+              ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.5)
+              : theme.colorScheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: todo.done
+                ? theme.colorScheme.outlineVariant
+                : theme.colorScheme.secondary.withOpacity(0.3),
+          ),
+        ),
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: onToggle,
+              child: Icon(
+                todo.done ? Icons.check_box : Icons.check_box_outline_blank,
+                size: 20,
+                color: todo.done
+                    ? theme.colorScheme.outline
+                    : theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                todo.content,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: todo.done
+                      ? theme.colorScheme.onSurfaceVariant
+                      : theme.colorScheme.onSecondaryContainer,
+                  decoration: todo.done ? TextDecoration.lineThrough : null,
+                  decorationColor: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.check_box_outline_blank,
-                      size: 14,
-                      color: theme.colorScheme.onSecondaryContainer),
-                  const SizedBox(width: 6),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                        maxWidth: MediaQuery.of(context).size.width * 0.55),
-                    child: Text(
-                      todos[i],
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSecondaryContainer),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  InkWell(
-                    onTap: () => onRemove(i),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(2),
-                      child: Icon(Icons.close,
-                          size: 14,
-                          color: theme.colorScheme.onSecondaryContainer
-                              .withOpacity(0.6)),
-                    ),
-                  ),
-                ],
+            ),
+            GestureDetector(
+              onTap: onRemove,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(Icons.close,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6)),
               ),
-            );
-          }),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

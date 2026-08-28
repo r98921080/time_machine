@@ -381,6 +381,7 @@ class _CategoryCard extends StatelessWidget {
             item: item,
             provider: provider,
             theme: theme,
+            category: category,
           )),
           const SizedBox(height: 8),
         ],
@@ -601,42 +602,101 @@ class _AddSubItemDialogState extends State<_AddSubItemDialog> {
 }
 
 // ── Sub Item Tile with independent level check-in ─────────────────
-class _SubItemTile extends StatelessWidget {
+class _SubItemTile extends StatefulWidget {
   final GoalSubItem item;
   final AppProvider provider;
   final ThemeData theme;
+  final GoalCategory category;
 
   const _SubItemTile({
     required this.item,
     required this.provider,
     required this.theme,
+    required this.category,
   });
 
+  @override
+  State<_SubItemTile> createState() => _SubItemTileState();
+}
+
+class _SubItemTileState extends State<_SubItemTile> {
+  bool _rebuilding = false;
+
   Set<GoalLevel> _loggedLevels() {
-    return provider.todayLogs
-        .where((l) => l.subItemId == item.id)
+    return widget.provider.todayLogs
+        .where((l) => l.subItemId == widget.item.id)
         .map((l) => l.achieved)
         .toSet();
+  }
+
+  Future<void> _rebuildTargets() async {
+    setState(() => _rebuilding = true);
+    try {
+      final catTitle = widget.category.title
+          .replaceAll(RegExp(r'[^一-鿿㐀-䶿\w\s]'), '')
+          .trim();
+      final targets = await widget.provider.generateGoalTargets(catTitle, widget.item.name);
+      if (targets == null || !mounted) return;
+      final updated = GoalCategory(
+        id: widget.category.id,
+        title: widget.category.title,
+        subItems: widget.category.subItems.map((s) {
+          if (s.id != widget.item.id) return s;
+          return GoalSubItem(
+            id: s.id,
+            name: s.name,
+            miniTarget: targets['mini']?.first ?? s.miniTarget,
+            advancedTarget: targets['advanced']?.first ?? s.advancedTarget,
+            eliteTarget: targets['elite']?.first ?? s.eliteTarget,
+          );
+        }).toList(),
+      );
+      await widget.provider.updateCategory(updated);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✨ AI 已重新建構目標')));
+      }
+    } finally {
+      if (mounted) setState(() => _rebuilding = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final logged = _loggedLevels();
+    final theme = widget.theme;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(item.name,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600)),
+          Row(
+            children: [
+              Expanded(
+                child: Text(widget.item.name,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600)),
+              ),
+              _rebuilding
+                  ? const SizedBox(
+                      width: 20, height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : IconButton(
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      tooltip: 'AI 重新建構目標',
+                      visualDensity: VisualDensity.compact,
+                      color: theme.colorScheme.primary,
+                      onPressed: _rebuildTargets,
+                    ),
+            ],
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
               _LevelButton(
                 level: GoalLevel.mini,
-                target: item.miniTarget,
+                target: widget.item.miniTarget,
                 checked: logged.contains(GoalLevel.mini),
                 onToggle: () => _toggle(context, GoalLevel.mini, logged),
                 theme: theme,
@@ -644,7 +704,7 @@ class _SubItemTile extends StatelessWidget {
               const SizedBox(width: 8),
               _LevelButton(
                 level: GoalLevel.advanced,
-                target: item.advancedTarget,
+                target: widget.item.advancedTarget,
                 checked: logged.contains(GoalLevel.advanced),
                 onToggle: () => _toggle(context, GoalLevel.advanced, logged),
                 theme: theme,
@@ -652,7 +712,7 @@ class _SubItemTile extends StatelessWidget {
               const SizedBox(width: 8),
               _LevelButton(
                 level: GoalLevel.elite,
-                target: item.eliteTarget,
+                target: widget.item.eliteTarget,
                 checked: logged.contains(GoalLevel.elite),
                 onToggle: () => _toggle(context, GoalLevel.elite, logged),
                 theme: theme,
@@ -668,8 +728,7 @@ class _SubItemTile extends StatelessWidget {
   Future<void> _toggle(BuildContext context, GoalLevel level,
       Set<GoalLevel> currentLogged) async {
     if (currentLogged.contains(level)) {
-      // Cancel this level
-      await provider.removeGoalLog(item.id, level);
+      await widget.provider.removeGoalLog(widget.item.id, level);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -679,15 +738,14 @@ class _SubItemTile extends StatelessWidget {
         );
       }
     } else {
-      // Log this level
-      await provider.logGoal(DailyGoalLog(
-        profileId: provider.profile!.id,
-        subItemId: item.id,
+      await widget.provider.logGoal(DailyGoalLog(
+        profileId: widget.provider.profile!.id,
+        subItemId: widget.item.id,
         achieved: level,
         score: level.points,
         date: DateTime.now(),
       ));
-      provider.checkAndUpdateStreak();
+      widget.provider.checkAndUpdateStreak();
     }
   }
 

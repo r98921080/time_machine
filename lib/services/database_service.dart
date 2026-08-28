@@ -7,6 +7,8 @@ import '../models/goal.dart';
 import '../models/diary_entry.dart';
 import '../models/character.dart';
 import '../models/chat_message.dart';
+import '../models/todo_item.dart';
+import '../models/bonus_challenge.dart';
 
 class DatabaseService {
   static Database? _db;
@@ -18,7 +20,7 @@ class DatabaseService {
 
   static Future<Database> _open() async {
     final path = join(await getDatabasesPath(), 'time_machine.db');
-    return openDatabase(path, version: 2, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    return openDatabase(path, version: 3, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -42,6 +44,30 @@ class DatabaseService {
           idx INTEGER NOT NULL,
           data TEXT NOT NULL,
           PRIMARY KEY (date, idx)
+        )
+      ''');
+    }
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS todos (
+          id TEXT PRIMARY KEY,
+          profileId TEXT NOT NULL,
+          content TEXT NOT NULL,
+          done INTEGER NOT NULL DEFAULT 0,
+          createdAt TEXT NOT NULL,
+          doneAt TEXT
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS bonus_challenges (
+          id TEXT PRIMARY KEY,
+          profileId TEXT NOT NULL,
+          title TEXT NOT NULL,
+          type TEXT NOT NULL,
+          date TEXT NOT NULL,
+          done INTEGER NOT NULL DEFAULT 0,
+          points INTEGER NOT NULL DEFAULT 10,
+          doneAt TEXT
         )
       ''');
     }
@@ -132,6 +158,28 @@ class DatabaseService {
         idx INTEGER NOT NULL,
         data TEXT NOT NULL,
         PRIMARY KEY (date, idx)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE todos (
+        id TEXT PRIMARY KEY,
+        profileId TEXT NOT NULL,
+        content TEXT NOT NULL,
+        done INTEGER NOT NULL DEFAULT 0,
+        createdAt TEXT NOT NULL,
+        doneAt TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE bonus_challenges (
+        id TEXT PRIMARY KEY,
+        profileId TEXT NOT NULL,
+        title TEXT NOT NULL,
+        type TEXT NOT NULL,
+        date TEXT NOT NULL,
+        done INTEGER NOT NULL DEFAULT 0,
+        points INTEGER NOT NULL DEFAULT 10,
+        doneAt TEXT
       )
     ''');
   }
@@ -238,7 +286,6 @@ class DatabaseService {
 
   static Future<void> insertGoalLog(DailyGoalLog log) async {
     final d = await db;
-    // Delete existing log for same subItem+level+day before inserting
     final start = DateTime(log.date.year, log.date.month, log.date.day);
     final end = start.add(const Duration(days: 1));
     await d.delete('goal_logs',
@@ -385,12 +432,11 @@ class DatabaseService {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  static Future<List<CharacterChatMessage>> getChatHistory(
-      String profileId, {int limit = 50}) async {
+  static Future<List<CharacterChatMessage>> getChatHistory(String profileId) async {
     final d = await db;
     final rows = await d.query('character_chats',
         where: 'profileId = ?', whereArgs: [profileId],
-        orderBy: 'timestamp ASC', limit: limit);
+        orderBy: 'timestamp ASC');
     return rows.map((r) => CharacterChatMessage(
       id: r['id'] as String,
       profileId: r['profileId'] as String,
@@ -444,5 +490,86 @@ class DatabaseService {
     final d = await db;
     await d.insert('owned_items', {'profileId': profileId, 'itemId': itemId},
         conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  // ── Todos ─────────────────────────────────────────────────────
+
+  static Future<List<TodoItem>> getTodos(String profileId) async {
+    final d = await db;
+    final rows = await d.query('todos',
+        where: 'profileId = ?', whereArgs: [profileId],
+        orderBy: 'done ASC, createdAt DESC');
+    return rows.map((r) => TodoItem.fromMap({
+      'id': r['id'],
+      'profileId': r['profileId'],
+      'content': r['content'],
+      'done': r['done'],
+      'createdAt': r['createdAt'],
+      'doneAt': r['doneAt'],
+    })).toList();
+  }
+
+  static Future<void> saveTodo(TodoItem todo) async {
+    final d = await db;
+    await d.insert('todos', {
+      'id': todo.id,
+      'profileId': todo.profileId,
+      'content': todo.content,
+      'done': todo.done ? 1 : 0,
+      'createdAt': todo.createdAt.toIso8601String(),
+      'doneAt': todo.doneAt?.toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> deleteTodo(String id) async {
+    final d = await db;
+    await d.delete('todos', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<void> toggleTodo(String id, bool done) async {
+    final d = await db;
+    await d.update('todos',
+        {'done': done ? 1 : 0, 'doneAt': done ? DateTime.now().toIso8601String() : null},
+        where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ── Bonus Challenges ──────────────────────────────────────────
+
+  static Future<List<BonusChallenge>> getBonusChallenges(
+      String profileId, String date) async {
+    final d = await db;
+    final rows = await d.query('bonus_challenges',
+        where: 'profileId = ? AND date = ?', whereArgs: [profileId, date]);
+    return rows.map((r) => BonusChallenge.fromMap({
+      'id': r['id'],
+      'profileId': r['profileId'],
+      'title': r['title'],
+      'type': r['type'],
+      'date': r['date'],
+      'done': r['done'],
+      'points': r['points'],
+      'doneAt': r['doneAt'],
+    })).toList();
+  }
+
+  static Future<void> saveBonusChallenge(BonusChallenge c) async {
+    final d = await db;
+    await d.insert('bonus_challenges', {
+      'id': c.id,
+      'profileId': c.profileId,
+      'title': c.title,
+      'type': c.type,
+      'date': c.date,
+      'done': c.done ? 1 : 0,
+      'points': c.points,
+      'doneAt': c.doneAt?.toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> completeBonusChallenge(String id) async {
+    final d = await db;
+    await d.update('bonus_challenges',
+        {'done': 1, 'doneAt': DateTime.now().toIso8601String()},
+        where: 'id = ?', whereArgs: [id]);
   }
 }

@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,11 +22,15 @@ class _CharacterScreenState extends State<CharacterScreen>
   late Animation<double> _idleAnim;
   Uint8List? _characterImage;
   bool _generatingImage = false;
-  static const _imageCacheKey = 'character_ai_image';
+  static const _imageCacheKey = 'character_ai_image_v2';
 
   final TextEditingController _msgCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
   bool _chatExpanded = false;
+
+  // Track the last message that errored so user can retry
+  String? _lastFailedMessage;
+  String? _chatError;
 
   @override
   void initState() {
@@ -57,451 +60,43 @@ class _CharacterScreenState extends State<CharacterScreen>
   }
 
   Future<void> _generateImage(AppProvider provider) async {
-    setState(() => _generatingImage = true);
+    setState(() { _generatingImage = true; });
     try {
-      final character = provider.character;
-      final profile = provider.profile;
-      if (character == null || profile == null) return;
-
-      final isMirror = profile.characterMode == CharacterMode.mirror;
-      final gender = isMirror ? (profile.mirrorGender ?? '她') : profile.sex;
-
-      final bytes = await _renderLocalAvatar(character, gender);
+      final bytes = await provider.generateCharacterImagePollinations();
       if (bytes != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_imageCacheKey, base64Encode(bytes));
         if (mounted) setState(() => _characterImage = bytes);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('⚠️ 圖片生成失敗，請稍後再試')));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('⚠️ 生成錯誤：$e')));
       }
     } finally {
       if (mounted) setState(() => _generatingImage = false);
     }
   }
 
-  Future<Uint8List?> _renderLocalAvatar(
-      CharacterAppearance character, String gender) async {
-    const w = 360.0;
-    const h = 480.0;
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, w, h));
-    _paintAvatar(canvas, const Size(w, h), character, gender);
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(w.toInt(), h.toInt());
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData?.buffer.asUint8List();
-  }
-
-  void _paintAvatar(
-      Canvas canvas, Size size, CharacterAppearance character, String gender) {
-    final w = size.width;
-    final h = size.height;
-    final isGirl = gender == '她' || gender == '女';
-
-    final skinColor = _skinColor(character.skinTone);
-    final hairColor = _hairColor(character.hairColor);
-    final outfitColor = _outfitColor(character.outfitId);
-
-    // Background gradient
-    final bgPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          outfitColor.withOpacity(0.2),
-          hairColor.withOpacity(0.08),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, w, h));
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, w, h),
-          const Radius.circular(20)),
-      bgPaint,
-    );
-
-    // Outfit body (lower portion)
-    final outfitPaint = Paint()..color = outfitColor;
-    final bodyPath = Path()
-      ..moveTo(0, h * 0.88)
-      ..lineTo(w * 0.14, h * 0.73)
-      ..quadraticBezierTo(w * 0.5, h * 0.66, w * 0.86, h * 0.73)
-      ..lineTo(w, h * 0.88)
-      ..lineTo(w, h)
-      ..lineTo(0, h)
-      ..close();
-    canvas.drawPath(bodyPath, outfitPaint);
-
-    // Collar shadow
-    final collarShadow = Paint()
-      ..color = outfitColor.withOpacity(0.5);
-    canvas.drawRect(
-        Rect.fromLTWH(w * 0.43, h * 0.59, w * 0.14, h * 0.1), collarShadow);
-
-    // Neck (skin)
-    final skinPaint = Paint()..color = skinColor;
-    canvas.drawRect(
-        Rect.fromLTWH(w * 0.44, h * 0.55, w * 0.12, h * 0.14), skinPaint);
-
-    // Back hair layer
-    _drawBackHair(canvas, w, h, character.hairStyle, Paint()..color = hairColor);
-
-    // Head
-    canvas.drawOval(
-      Rect.fromCenter(
-          center: Offset(w * 0.5, h * 0.37), width: w * 0.5, height: h * 0.38),
-      skinPaint,
-    );
-
-    // Ears
-    canvas.drawOval(
-        Rect.fromCenter(
-            center: Offset(w * 0.245, h * 0.39),
-            width: w * 0.065,
-            height: h * 0.055),
-        skinPaint);
-    canvas.drawOval(
-        Rect.fromCenter(
-            center: Offset(w * 0.755, h * 0.39),
-            width: w * 0.065,
-            height: h * 0.055),
-        skinPaint);
-
-    // Front hair
-    _drawFrontHair(
-        canvas, w, h, character.hairStyle, Paint()..color = hairColor, isGirl);
-
-    // Eyes (white sclera)
-    final white = Paint()..color = Colors.white;
-    canvas.drawOval(
-        Rect.fromCenter(
-            center: Offset(w * 0.37, h * 0.375),
-            width: w * 0.1,
-            height: h * 0.072),
-        white);
-    canvas.drawOval(
-        Rect.fromCenter(
-            center: Offset(w * 0.63, h * 0.375),
-            width: w * 0.1,
-            height: h * 0.072),
-        white);
-
-    // Iris
-    final iris = Paint()..color = const Color(0xFF3A6B8A);
-    canvas.drawCircle(Offset(w * 0.37, h * 0.378), w * 0.038, iris);
-    canvas.drawCircle(Offset(w * 0.63, h * 0.378), w * 0.038, iris);
-
-    // Pupil
-    final pupil = Paint()..color = const Color(0xFF0D1B2A);
-    canvas.drawCircle(Offset(w * 0.37, h * 0.38), w * 0.025, pupil);
-    canvas.drawCircle(Offset(w * 0.63, h * 0.38), w * 0.025, pupil);
-
-    // Eye shine
-    final shine = Paint()..color = Colors.white;
-    canvas.drawCircle(Offset(w * 0.375, h * 0.37), w * 0.01, shine);
-    canvas.drawCircle(Offset(w * 0.635, h * 0.37), w * 0.01, shine);
-
-    // Eyelashes (top)
-    final lashPaint = Paint()
-      ..color = const Color(0xFF1A1A2E)
-      ..strokeWidth = 1.8
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-        Rect.fromCenter(
-            center: Offset(w * 0.37, h * 0.377),
-            width: w * 0.12,
-            height: h * 0.085),
-        3.5,
-        2.4,
-        false,
-        lashPaint..strokeWidth = 2.2);
-    canvas.drawArc(
-        Rect.fromCenter(
-            center: Offset(w * 0.63, h * 0.377),
-            width: w * 0.12,
-            height: h * 0.085),
-        0.3,
-        2.4,
-        false,
-        lashPaint);
-
-    // Eyebrows
-    final browPaint = Paint()
-      ..color = hairColor.withOpacity(0.9)
-      ..strokeWidth = 2.2
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(Offset(w * 0.315, h * 0.325), Offset(w * 0.42, h * 0.316),
-        browPaint);
-    canvas.drawLine(Offset(w * 0.58, h * 0.316), Offset(w * 0.685, h * 0.325),
-        browPaint);
-
-    // Nose (subtle)
-    final nosePaint = Paint()
-      ..color = skinColor.withOpacity(0.0)
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    // Tiny nostril dots
-    canvas.drawCircle(Offset(w * 0.477, h * 0.44), 1.8,
-        Paint()..color = skinColor.withAlpha(120));
-    canvas.drawCircle(Offset(w * 0.523, h * 0.44), 1.8,
-        Paint()..color = skinColor.withAlpha(120));
-
-    // Blush cheeks
-    final blush = Paint()..color = const Color(0xFFFFB3C1).withOpacity(0.38);
-    canvas.drawOval(
-        Rect.fromCenter(
-            center: Offset(w * 0.275, h * 0.425),
-            width: w * 0.16,
-            height: h * 0.065),
-        blush);
-    canvas.drawOval(
-        Rect.fromCenter(
-            center: Offset(w * 0.725, h * 0.425),
-            width: w * 0.16,
-            height: h * 0.065),
-        blush);
-
-    // Mouth / smile
-    final lipColor =
-        isGirl ? const Color(0xFFE87B8C) : const Color(0xFFD96B6B);
-    final smilePaint = Paint()
-      ..color = lipColor
-      ..strokeWidth = 2.2
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    final smilePath = Path()
-      ..moveTo(w * 0.43, h * 0.48)
-      ..quadraticBezierTo(w * 0.5, h * 0.525, w * 0.57, h * 0.48);
-    canvas.drawPath(smilePath, smilePaint);
-
-    // Upper lip line
-    final lipLine = Paint()
-      ..color = lipColor.withOpacity(0.5)
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(
-        Offset(w * 0.455, h * 0.477), Offset(w * 0.5, h * 0.47), lipLine);
-    canvas.drawLine(
-        Offset(w * 0.545, h * 0.477), Offset(w * 0.5, h * 0.47), lipLine);
-  }
-
-  Color _skinColor(SkinTone? tone) {
-    switch (tone) {
-      case SkinTone.light:
-        return const Color(0xFFFFF0E6);
-      case SkinTone.medium:
-        return const Color(0xFFF4C99A);
-      case SkinTone.tan:
-        return const Color(0xFFD4956A);
-      case SkinTone.dark:
-        return const Color(0xFF8B5E3C);
-      case null:
-        return const Color(0xFFF4C99A);
-    }
-  }
-
-  Color _hairColor(HairColor? color) {
-    switch (color) {
-      case HairColor.black:
-        return const Color(0xFF1A1A1A);
-      case HairColor.brown:
-        return const Color(0xFF5C3A1E);
-      case HairColor.blonde:
-        return const Color(0xFFE8C84A);
-      case HairColor.red:
-        return const Color(0xFFC0392B);
-      case HairColor.gray:
-        return const Color(0xFFB0B0B0);
-      case HairColor.fantasy:
-        return const Color(0xFF8B5CF6);
-      case null:
-        return const Color(0xFF1A1A1A);
-    }
-  }
-
-  Color _outfitColor(String? outfitId) {
-    const map = {
-      'school_uniform': Color(0xFF4A90D9),
-      'casual_tshirt': Color(0xFF5BA85A),
-      'sporty': Color(0xFFE55A2B),
-      'formal': Color(0xFF2C3E50),
-      'traditional': Color(0xFFC0392B),
-      'hoodie': Color(0xFF8B7BC8),
-      'dress': Color(0xFFE91E8C),
-      'suit': Color(0xFF34495E),
-    };
-    return map[outfitId] ?? const Color(0xFF7E57C2);
-  }
-
-  void _drawBackHair(Canvas canvas, double w, double h, HairStyle? style,
-      Paint paint) {
-    switch (style ?? HairStyle.medium) {
-      case HairStyle.long:
-      case HairStyle.ponytail:
-        canvas.drawRRect(
-          RRect.fromRectAndCorners(
-            Rect.fromLTWH(w * 0.14, h * 0.22, w * 0.13, h * 0.42),
-            bottomLeft: const Radius.circular(14),
-            bottomRight: const Radius.circular(14),
-          ),
-          paint,
-        );
-        canvas.drawRRect(
-          RRect.fromRectAndCorners(
-            Rect.fromLTWH(w * 0.73, h * 0.22, w * 0.13, h * 0.42),
-            bottomLeft: const Radius.circular(14),
-            bottomRight: const Radius.circular(14),
-          ),
-          paint,
-        );
-        break;
-      case HairStyle.curly:
-        canvas.drawCircle(Offset(w * 0.22, h * 0.44), w * 0.1, paint);
-        canvas.drawCircle(Offset(w * 0.78, h * 0.44), w * 0.1, paint);
-        break;
-      default:
-        break;
-    }
-  }
-
-  void _drawFrontHair(Canvas canvas, double w, double h, HairStyle? style,
-      Paint paint, bool isGirl) {
-    switch (style ?? HairStyle.medium) {
-      case HairStyle.short:
-        final path = Path()
-          ..moveTo(w * 0.24, h * 0.28)
-          ..quadraticBezierTo(w * 0.5, h * 0.1, w * 0.76, h * 0.28)
-          ..quadraticBezierTo(w * 0.68, h * 0.16, w * 0.5, h * 0.14)
-          ..quadraticBezierTo(w * 0.32, h * 0.16, w * 0.24, h * 0.28);
-        canvas.drawPath(path, paint);
-        canvas.drawOval(
-            Rect.fromCenter(
-                center: Offset(w * 0.255, h * 0.33),
-                width: w * 0.1,
-                height: h * 0.11),
-            paint);
-        canvas.drawOval(
-            Rect.fromCenter(
-                center: Offset(w * 0.745, h * 0.33),
-                width: w * 0.1,
-                height: h * 0.11),
-            paint);
-        break;
-      case HairStyle.medium:
-        canvas.drawOval(
-          Rect.fromCenter(
-              center: Offset(w * 0.5, h * 0.19),
-              width: w * 0.62,
-              height: h * 0.22),
-          paint,
-        );
-        canvas.drawOval(
-            Rect.fromCenter(
-                center: Offset(w * 0.255, h * 0.36),
-                width: w * 0.13,
-                height: h * 0.17),
-            paint);
-        canvas.drawOval(
-            Rect.fromCenter(
-                center: Offset(w * 0.745, h * 0.36),
-                width: w * 0.13,
-                height: h * 0.17),
-            paint);
-        break;
-      case HairStyle.long:
-        canvas.drawOval(
-          Rect.fromCenter(
-              center: Offset(w * 0.5, h * 0.19),
-              width: w * 0.62,
-              height: h * 0.22),
-          paint,
-        );
-        canvas.drawOval(
-            Rect.fromCenter(
-                center: Offset(w * 0.23, h * 0.37),
-                width: w * 0.16,
-                height: h * 0.22),
-            paint);
-        canvas.drawOval(
-            Rect.fromCenter(
-                center: Offset(w * 0.77, h * 0.37),
-                width: w * 0.16,
-                height: h * 0.22),
-            paint);
-        break;
-      case HairStyle.bun:
-        canvas.drawOval(
-          Rect.fromCenter(
-              center: Offset(w * 0.5, h * 0.2),
-              width: w * 0.6,
-              height: h * 0.21),
-          paint,
-        );
-        // Bun
-        canvas.drawCircle(Offset(w * 0.5, h * 0.09), w * 0.13, paint);
-        canvas.drawOval(
-            Rect.fromCenter(
-                center: Offset(w * 0.26, h * 0.35),
-                width: w * 0.1,
-                height: h * 0.14),
-            paint);
-        canvas.drawOval(
-            Rect.fromCenter(
-                center: Offset(w * 0.74, h * 0.35),
-                width: w * 0.1,
-                height: h * 0.14),
-            paint);
-        break;
-      case HairStyle.ponytail:
-        canvas.drawOval(
-          Rect.fromCenter(
-              center: Offset(w * 0.5, h * 0.19),
-              width: w * 0.6,
-              height: h * 0.22),
-          paint,
-        );
-        // Ponytail
-        final tail = Path()
-          ..moveTo(w * 0.68, h * 0.24)
-          ..quadraticBezierTo(w * 0.88, h * 0.35, w * 0.76, h * 0.56)
-          ..quadraticBezierTo(w * 0.72, h * 0.36, w * 0.62, h * 0.27);
-        canvas.drawPath(tail, paint);
-        canvas.drawOval(
-            Rect.fromCenter(
-                center: Offset(w * 0.25, h * 0.36),
-                width: w * 0.11,
-                height: h * 0.16),
-            paint);
-        break;
-      case HairStyle.curly:
-        canvas.drawOval(
-          Rect.fromCenter(
-              center: Offset(w * 0.5, h * 0.19),
-              width: w * 0.66,
-              height: h * 0.24),
-          paint,
-        );
-        canvas.drawCircle(Offset(w * 0.22, h * 0.34), w * 0.1, paint);
-        canvas.drawCircle(Offset(w * 0.78, h * 0.34), w * 0.1, paint);
-        canvas.drawCircle(Offset(w * 0.21, h * 0.43), w * 0.08, paint);
-        canvas.drawCircle(Offset(w * 0.79, h * 0.43), w * 0.08, paint);
-        break;
-    }
-  }
-
-  void _showKeyDialog(AppProvider provider) {
-    final ctrl = TextEditingController(text: provider.openAIKey ?? '');
+  void _showNameEditDialog(AppProvider provider) {
+    final ctrl = TextEditingController(text: provider.characterName);
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('設定 OpenAI API Key'),
+        title: const Text('幫角色取名字'),
         content: TextField(
           controller: ctrl,
+          autofocus: true,
+          maxLength: 10,
           decoration: const InputDecoration(
-            labelText: 'API Key',
-            hintText: 'sk-proj-...',
+            labelText: '角色名稱',
+            hintText: '例如：小晴、Kai…',
           ),
-          obscureText: true,
         ),
         actions: [
           TextButton(
@@ -509,13 +104,10 @@ class _CharacterScreenState extends State<CharacterScreen>
               child: const Text('取消')),
           FilledButton(
             onPressed: () async {
-              await provider.saveOpenAIKey(ctrl.text.trim());
-              if (context.mounted) {
-                Navigator.pop(context);
-                _generateImage(provider);
-              }
+              await provider.saveCharacterName(ctrl.text.trim());
+              if (context.mounted) Navigator.pop(context);
             },
-            child: const Text('儲存並生成'),
+            child: const Text('確定'),
           ),
         ],
       ),
@@ -523,22 +115,20 @@ class _CharacterScreenState extends State<CharacterScreen>
   }
 
   void _showAmnesiaDialog(AppProvider provider) {
-    final isMirror =
-        provider.profile?.characterMode == CharacterMode.mirror;
+    final isMirror = provider.profile?.characterMode == CharacterMode.mirror;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('讓角色失憶？'),
         content: Text(isMirror
-            ? '${provider.profile?.mirrorGender ?? '她'}會忘記你們之間的所有對話，關係重置為陌生人。確定嗎？'
+            ? '${provider.characterName}會忘記你們之間的所有對話，關係重置為陌生人。確定嗎？'
             : '角色會忘記所有聊天記錄，關係重置為陌生人。確定嗎？'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('取消')),
           FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: Colors.orange),
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
             onPressed: () async {
               await provider.resetCharacterRelationship();
               if (context.mounted) Navigator.pop(context);
@@ -550,18 +140,25 @@ class _CharacterScreenState extends State<CharacterScreen>
     );
   }
 
-  Future<void> _sendMessage(AppProvider provider) async {
-    final text = _msgCtrl.text.trim();
+  Future<void> _sendMessage(AppProvider provider, String text) async {
     if (text.isEmpty) return;
     _msgCtrl.clear();
-    await provider.sendCharacterMessage(text);
-    if (_scrollCtrl.hasClients) {
-      await Future.delayed(const Duration(milliseconds: 100));
-      _scrollCtrl.animateTo(
-        _scrollCtrl.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+    setState(() { _chatError = null; _lastFailedMessage = null; });
+    try {
+      await provider.sendCharacterMessage(text);
+      if (_scrollCtrl.hasClients) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        _scrollCtrl.animateTo(
+          _scrollCtrl.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _chatError = '⚠️ 回應失敗，請點重試';
+        _lastFailedMessage = text;
+      });
     }
   }
 
@@ -574,15 +171,23 @@ class _CharacterScreenState extends State<CharacterScreen>
 
     final theme = Theme.of(context);
     final isMirror = profile.characterMode == CharacterMode.mirror;
-    final characterName = isMirror
-        ? (profile.mirrorGender == '她' ? '小琪' : '小凱')
-        : '時光';
+    final charName = provider.characterName;
 
     return Scaffold(
       appBar: AppBar(
         title: Row(
           children: [
-            Text(isMirror ? '映照' : '我的角色'),
+            GestureDetector(
+              onTap: () => _showNameEditDialog(provider),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(isMirror ? '映照' : '我的角色'),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.edit, size: 14),
+                ],
+              ),
+            ),
             const SizedBox(width: 8),
             _RelationshipBadge(relationship: provider.relationship),
           ],
@@ -595,24 +200,30 @@ class _CharacterScreenState extends State<CharacterScreen>
           ),
           IconButton(
             icon: const Icon(Icons.tune),
-            onPressed: () =>
-                _showCustomizeSheet(context, provider, character),
+            onPressed: () => _showCustomizeSheet(context, provider, character),
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (val) {
               if (val == 'amnesia') _showAmnesiaDialog(provider);
+              if (val == 'rename') _showNameEditDialog(provider);
             },
             itemBuilder: (_) => [
               const PopupMenuItem(
+                value: 'rename',
+                child: Row(children: [
+                  Icon(Icons.edit),
+                  SizedBox(width: 8),
+                  Text('修改角色名'),
+                ]),
+              ),
+              const PopupMenuItem(
                 value: 'amnesia',
-                child: Row(
-                  children: [
-                    Icon(Icons.psychology_alt, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Text('讓角色失憶'),
-                  ],
-                ),
+                child: Row(children: [
+                  Icon(Icons.psychology_alt, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Text('讓角色失憶'),
+                ]),
               ),
             ],
           ),
@@ -629,14 +240,8 @@ class _CharacterScreenState extends State<CharacterScreen>
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: isMirror
-                    ? [
-                        theme.colorScheme.secondaryContainer,
-                        theme.colorScheme.surface,
-                      ]
-                    : [
-                        theme.colorScheme.primaryContainer,
-                        theme.colorScheme.surface,
-                      ],
+                    ? [theme.colorScheme.secondaryContainer, theme.colorScheme.surface]
+                    : [theme.colorScheme.primaryContainer, theme.colorScheme.surface],
               ),
             ),
             child: Stack(
@@ -660,9 +265,7 @@ class _CharacterScreenState extends State<CharacterScreen>
                         )
                       : _PlaceholderCharacter(
                           isMirror: isMirror,
-                          gender: isMirror
-                              ? (profile.mirrorGender ?? '她')
-                              : profile.sex,
+                          gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
                           compact: _chatExpanded,
                           theme: theme,
                         ),
@@ -671,7 +274,9 @@ class _CharacterScreenState extends State<CharacterScreen>
                   bottom: 8,
                   right: 16,
                   child: _generatingImage
-                      ? const CircularProgressIndicator()
+                      ? const SizedBox(
+                          width: 36, height: 36,
+                          child: CircularProgressIndicator(strokeWidth: 2))
                       : FloatingActionButton.small(
                           heroTag: 'gen_char',
                           onPressed: () => _generateImage(provider),
@@ -679,22 +284,16 @@ class _CharacterScreenState extends State<CharacterScreen>
                           child: const Icon(Icons.auto_awesome),
                         ),
                 ),
-                // Expand/collapse chat toggle
                 Positioned(
                   bottom: 8,
                   left: 16,
                   child: FloatingActionButton.small(
                     heroTag: 'toggle_chat',
-                    backgroundColor:
-                        theme.colorScheme.secondaryContainer,
-                    foregroundColor:
-                        theme.colorScheme.onSecondaryContainer,
-                    onPressed: () =>
-                        setState(() => _chatExpanded = !_chatExpanded),
+                    backgroundColor: theme.colorScheme.secondaryContainer,
+                    foregroundColor: theme.colorScheme.onSecondaryContainer,
+                    onPressed: () => setState(() => _chatExpanded = !_chatExpanded),
                     tooltip: _chatExpanded ? '顯示角色' : '展開聊天',
-                    child: Icon(_chatExpanded
-                        ? Icons.person
-                        : Icons.chat_bubble_outline),
+                    child: Icon(_chatExpanded ? Icons.person : Icons.chat_bubble_outline),
                   ),
                 ),
               ],
@@ -705,14 +304,23 @@ class _CharacterScreenState extends State<CharacterScreen>
           Expanded(
             child: Column(
               children: [
-                // Character name + relationship
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                   child: Row(
                     children: [
-                      Text(characterName,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold)),
+                      GestureDetector(
+                        onTap: () => _showNameEditDialog(provider),
+                        child: Row(
+                          children: [
+                            Text(charName,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 4),
+                            Icon(Icons.edit, size: 12,
+                                color: theme.colorScheme.onSurfaceVariant),
+                          ],
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         _relationshipDesc(provider.relationship),
@@ -725,11 +333,10 @@ class _CharacterScreenState extends State<CharacterScreen>
                 ),
                 const Divider(height: 1),
 
-                // Message list
                 Expanded(
                   child: provider.chatHistory.isEmpty
                       ? _EmptyChatPlaceholder(
-                          characterName: characterName,
+                          characterName: charName,
                           relationship: provider.relationship,
                           theme: theme,
                         )
@@ -740,22 +347,45 @@ class _CharacterScreenState extends State<CharacterScreen>
                           itemCount: provider.chatHistory.length,
                           itemBuilder: (ctx, i) {
                             final msg = provider.chatHistory[i];
-                            final isUser = msg.role == 'user';
                             return _ChatBubble(
                               message: msg,
-                              isUser: isUser,
-                              characterName: characterName,
+                              isUser: msg.role == 'user',
+                              characterName: charName,
                               theme: theme,
                             );
                           },
                         ),
                 ),
 
-                // Input area
+                // Error + retry row
+                if (_chatError != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(_chatError!,
+                              style: TextStyle(
+                                  color: theme.colorScheme.error,
+                                  fontSize: 13)),
+                        ),
+                        if (_lastFailedMessage != null)
+                          TextButton.icon(
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: const Text('重試'),
+                            onPressed: () {
+                              final msg = _lastFailedMessage!;
+                              _sendMessage(provider, msg);
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+
                 _ChatInput(
                   controller: _msgCtrl,
                   sending: provider.chatting,
-                  onSend: () => _sendMessage(provider),
+                  onSend: () => _sendMessage(provider, _msgCtrl.text.trim()),
                   theme: theme,
                 ),
               ],
@@ -781,8 +411,7 @@ class _CharacterScreenState extends State<CharacterScreen>
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) =>
-          _CustomizeSheet(current: current, provider: provider),
+      builder: (_) => _CustomizeSheet(current: current, provider: provider),
     );
   }
 }
@@ -802,18 +431,11 @@ class _RelationshipBadge extends StatelessWidget {
     };
     final (fg, bg) = colors[relationship] ??
         (Colors.grey.shade600, Colors.grey.shade100);
-    final icons = {
-      '陌生人': '👤',
-      '朋友': '😊',
-      '曖昧': '💗',
-      '親密': '❤️',
-    };
+    final icons = {'陌生人': '👤', '朋友': '😊', '曖昧': '💗', '親密': '❤️'};
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-      ),
+          color: bg, borderRadius: BorderRadius.circular(12)),
       child: Text(
         '${icons[relationship] ?? ''} $relationship',
         style: TextStyle(
@@ -829,23 +451,21 @@ class _EmptyChatPlaceholder extends StatelessWidget {
   final String relationship;
   final ThemeData theme;
   const _EmptyChatPlaceholder(
-      {required this.characterName,
-      required this.relationship,
-      required this.theme});
+      {required this.characterName, required this.relationship, required this.theme});
 
   @override
   Widget build(BuildContext context) {
     final hints = {
       '陌生人': '說聲「你好」，開始認識$characterName吧！',
       '朋友': '和$characterName聊聊今天過得怎麼樣',
-      '曖昧': '傳個訊息給$characterName，看${characterName}怎麼說',
+      '曖昧': '傳個訊息給$characterName，看$characterName怎麼說',
       '親密': '$characterName在等你說話呢',
     };
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('💬', style: const TextStyle(fontSize: 40)),
+          const Text('💬', style: TextStyle(fontSize: 40)),
           const SizedBox(height: 12),
           Text(
             hints[relationship] ?? '開始對話吧',
@@ -878,8 +498,8 @@ class _ChatBubble extends StatelessWidget {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.75),
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
         child: Column(
           crossAxisAlignment:
               isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -893,8 +513,7 @@ class _ChatBubble extends StatelessWidget {
               ),
             Container(
               margin: const EdgeInsets.only(bottom: 8),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: isUser
                     ? theme.colorScheme.primary
@@ -944,8 +563,8 @@ class _ChatInput extends StatelessWidget {
           12, 8, 12, 8 + MediaQuery.of(context).viewInsets.bottom),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        border: Border(
-            top: BorderSide(color: theme.colorScheme.outlineVariant)),
+        border:
+            Border(top: BorderSide(color: theme.colorScheme.outlineVariant)),
       ),
       child: Row(
         children: [
@@ -975,7 +594,8 @@ class _ChatInput extends StatelessWidget {
               ? const SizedBox(
                   width: 40,
                   height: 40,
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+                  child: Center(
+                      child: CircularProgressIndicator(strokeWidth: 2)))
               : IconButton.filled(
                   icon: const Icon(Icons.send),
                   onPressed: onSend,
@@ -1010,8 +630,7 @@ class _PlaceholderCharacter extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: theme.colorScheme.outlineVariant, width: 2),
+        border: Border.all(color: theme.colorScheme.outlineVariant, width: 2),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1156,8 +775,7 @@ class _EnumRow<T> extends StatelessWidget {
           onTap: () => onTap(values[i]),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: isSelected
                   ? theme.colorScheme.primaryContainer

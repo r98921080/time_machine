@@ -35,6 +35,7 @@ class UserProfile {
   DateTime? lastLogDate;
   CharacterMode characterMode;
   String? mirrorGender;
+  String? characterName;
   DateTime createdAt;
 
   UserProfile({
@@ -51,6 +52,7 @@ class UserProfile {
     this.lastLogDate,
     this.characterMode = CharacterMode.self,
     this.mirrorGender,
+    this.characterName,
     DateTime? createdAt,
   }) : id = id ?? const Uuid().v4(),
        createdAt = createdAt ?? DateTime.now();
@@ -84,6 +86,7 @@ class UserProfile {
     'lastLogDate': lastLogDate?.toIso8601String(),
     'characterMode': characterMode.name,
     'mirrorGender': mirrorGender,
+    'characterName': characterName,
     'createdAt': createdAt.toIso8601String(),
   };
 
@@ -106,6 +109,7 @@ class UserProfile {
       orElse: () => CharacterMode.self,
     ),
     mirrorGender: m['mirrorGender'] as String?,
+    characterName: m['characterName'] as String?,
     createdAt: DateTime.parse(m['createdAt'] as String),
   );
 
@@ -122,6 +126,7 @@ class UserProfile {
     DateTime? lastLogDate,
     CharacterMode? characterMode,
     String? mirrorGender,
+    Object? characterName = _sentinel,
   }) => UserProfile(
     id: id,
     nickname: nickname ?? this.nickname,
@@ -136,6 +141,11 @@ class UserProfile {
     lastLogDate: lastLogDate ?? this.lastLogDate,
     characterMode: characterMode ?? this.characterMode,
     mirrorGender: mirrorGender ?? this.mirrorGender,
+    characterName: characterName == _sentinel
+        ? this.characterName
+        : characterName as String?,
     createdAt: createdAt,
   );
 }
+
+const _sentinel = Object();

@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 
 class GeminiService {
   static const _model = 'gemini-3.6-flash';
-  static const _imageModel = 'gemini-2.0-flash-preview-image-generation';
 
   final String _apiKey;
   final GenerativeModel _textModel;
@@ -72,7 +71,11 @@ class GeminiService {
     required String? diaryContent,
     required String characterMode,
     required String performanceLevel,
+    List<String> foodPhotoDescriptions = const [],
   }) async {
+    final photoHint = foodPhotoDescriptions.isNotEmpty
+        ? '\n- 今日飲食照片描述：${foodPhotoDescriptions.join('；')}'
+        : '';
     final prompt = '''你是一個溫柔的生活記錄AI，幫使用者生成今日的Vlog文字日誌。
 風格根據「表現等級」調整：
 - 卓越：充滿活力、讚美、正向鼓勵
@@ -85,10 +88,11 @@ class GeminiService {
 - 目標點數：$goalPoints 點
 - 日記：${diaryContent?.isNotEmpty == true ? diaryContent : '（今天沒有寫日記）'}
 - 角色模式：$characterMode
-- 表現等級：$performanceLevel
+- 表現等級：$performanceLevel$photoHint
 
 請生成約100-150字的今日Vlog，第一人稱敘事，有溫度像真人在說話。
 如果是映照模式，從使用者想像中的對象視角加入一句話。
+如果有飲食照片描述，自然地帶入食物細節。
 絕對不要空白回覆，一定要有內容。''';
     try {
       final response = await _gen([Content.text(prompt)]);
@@ -96,6 +100,21 @@ class GeminiService {
       if (text != null && text.isNotEmpty) return text;
     } catch (_) {}
     return '今天是充實的一天。不管結果如何，能記錄下來就是進步的開始。明天的$nickname，會比今天更好。';
+  }
+
+  Future<String> describeFoodPhoto(Uint8List imageBytes) async {
+    const prompt = '請用一句話（20字以內）描述這張照片中的食物，包含食物名稱和大致份量。';
+    try {
+      final response = await _visionModel.generateContent([
+        Content.multi([
+          DataPart('image/jpeg', imageBytes),
+          TextPart(prompt),
+        ]),
+      ]);
+      return response.text?.trim() ?? '';
+    } catch (_) {
+      return '';
+    }
   }
 
   // ── Diary Auto-completion ────────────────────────────────────
@@ -107,7 +126,7 @@ class GeminiService {
 草稿：$partialContent
 
 補全內容（直接續寫，不要重複草稿）：''';
-    final response = await _gen([Content.text(prompt)]);
+    final response = await _chatGen([Content.text(prompt)]);
     return response.text ?? '';
   }
 
@@ -123,6 +142,64 @@ $diaryContent
     final text = response.text ?? '';
     return text.split('\n').where((l) => l.trim().isNotEmpty).take(5).toList();
   }
+
+  // ── Bonus Challenges ─────────────────────────────────────────
+
+  Future<List<Map<String, String>>> generateBonusChallenges({
+    required String nickname,
+    required String goal,
+    required String? diaryContent,
+    required List<String> goalCategories,
+    required String relationship,
+  }) async {
+    final goalStr = goalCategories.isNotEmpty ? goalCategories.join('、') : '一般健康目標';
+    final prompt = '''你是時光機APP的AI教練，要為使用者「$nickname」生成今天的3個Bonus小挑戰。
+
+使用者目標：$goal
+目標類別：$goalStr
+與角色關係：$relationship
+今日日記：${diaryContent?.isNotEmpty == true ? diaryContent : '（未填寫）'}
+
+請生成3個小挑戰，分別對應3種類型：
+1. physical（身體運動類）
+2. dietary（飲食健康類）
+3. emotional（情緒社交類）
+
+要求：
+- 每個挑戰要具體可執行，今天就能完成
+- 難度適中，不要太難讓人放棄，也不要太簡單
+- 用正向鼓勵的語氣
+- 每個挑戰15字以內
+
+輸出JSON格式：
+[
+  {"type":"physical","title":"挑戰內容"},
+  {"type":"dietary","title":"挑戰內容"},
+  {"type":"emotional","title":"挑戰內容"}
+]
+
+只輸出JSON陣列，不要其他文字。''';
+    try {
+      final res = await _gen([Content.text(prompt)]);
+      final text = (res.text ?? '').replaceAll('```json', '').replaceAll('```', '').trim();
+      final start = text.indexOf('[');
+      final end = text.lastIndexOf(']');
+      if (start < 0 || end < 0) return _fallbackChallenges();
+      final list = jsonDecode(text.substring(start, end + 1)) as List;
+      return list.map((e) => {
+        'type': (e['type'] as String?) ?? 'physical',
+        'title': (e['title'] as String?) ?? '完成一個小目標',
+      }).toList();
+    } catch (_) {
+      return _fallbackChallenges();
+    }
+  }
+
+  List<Map<String, String>> _fallbackChallenges() => [
+    {'type': 'physical', 'title': '起身走動10分鐘'},
+    {'type': 'dietary', 'title': '今天多喝一杯水'},
+    {'type': 'emotional', 'title': '傳一則暖心訊息給朋友'},
+  ];
 
   // ── Goal Review ──────────────────────────────────────────────
 
@@ -147,23 +224,16 @@ $diaryContent
     return response.text ?? '繼續加油！';
   }
 
-  static const _timeout = Duration(seconds: 12);
+  static const _timeout = Duration(seconds: 30);
+  static const _chatTimeout = Duration(seconds: 120);
 
   Future<GenerateContentResponse> _gen(List<Content> content) =>
       _textModel.generateContent(content).timeout(_timeout);
 
-  // ── Character Chat (with memory) ─────────────────────────────
+  Future<GenerateContentResponse> _chatGen(List<Content> content) =>
+      _textModel.generateContent(content).timeout(_chatTimeout);
 
-  static const _chatFallbacks = [
-    '嗯，我在聽你說，繼續呢？',
-    '這樣啊…感覺你今天很有想法耶。',
-    '哈，有意思。你說的讓我想了一下。',
-    '嗯嗯，我有在認真聽。',
-    '原來如此，你繼續說吧。',
-    '好有趣喔，然後呢？',
-    '你這個問題問得好，讓我想想…',
-    '嗯，我也這麼覺得。',
-  ];
+  // ── Character Chat (no fallback — throws on failure) ─────────
 
   Future<String> chatWithCharacter({
     required String characterName,
@@ -173,6 +243,7 @@ $diaryContent
     required List<Map<String, String>> history,
     required String userMessage,
     required Map<String, dynamic> todayData,
+    String? memorySummary,
   }) async {
     final isGirl = gender == '她' || gender == '女';
     final roleHint = isMirror
@@ -187,17 +258,21 @@ $diaryContent
         }[relationship] ??
         '正常朋友';
 
-    // Compact history (last 8 exchanges)
-    final recent = history.takeLast(8);
-    final histStr = recent.isEmpty
-        ? ''
-        : '對話記錄：\n${recent.map((h) => '${h['role'] == 'user' ? '他' : characterName}：${h['content']}').join('\n')}\n\n';
+    // History: include all messages; compress old ones if >50
+    String histStr = '';
+    if (memorySummary != null && memorySummary.isNotEmpty) {
+      histStr = '【過去的對話記憶摘要】\n$memorySummary\n\n';
+    }
+    final recent = history.length > 50 ? history.sublist(history.length - 50) : history;
+    if (recent.isNotEmpty) {
+      histStr += '【近期對話】\n${recent.map((h) => '${h['role'] == 'user' ? '他' : characterName}：${h['content']}').join('\n')}\n\n';
+    }
 
     final cal = (todayData['calories'] as num?)?.round() ?? 0;
     final pts = todayData['goalPoints'] ?? 0;
     final diary = todayData['diary'] as String? ?? '';
     final contextHint = cal > 0
-        ? '（背景：他今天吃了 $cal kcal，積分 $pts 點${diary.isNotEmpty ? '，日記：「$diary」' : ''}。有機會自然帶入，但不要每次都說。）'
+        ? '（背景：他今天吃了 $cal kcal，積分 $pts 點${diary.isNotEmpty ? '，日記：「${diary.length > 50 ? diary.substring(0, 50) + '…' : diary}」' : ''}。有機會自然帶入，但不要每次都說。）'
         : '';
 
     final prompt = '''你叫$characterName。$roleHint 關係：$relHint。$contextHint
@@ -207,106 +282,17 @@ $histStr他說：「$userMessage」
 你（$characterName）的回應——
 要求：
 - 直接針對「他說」的內容回應，不要忽略他說的話
-- 口語化繁體中文，不超過60字
+- 口語化繁體中文，不超過80字
 - 禁止用「嗯」「好的」「原來如此」「我在聽」「辛苦了」開頭
 - 有自己的個性，像真實的人在聊天
 - 如果他問你問題，就認真回答那個問題
+- 可以參考過去對話記憶來回應，展示你記得他說過的事
 $characterName：''';
 
-    try {
-      final response = await _gen([Content.text(prompt)]);
-      final text = response.text?.trim();
-      if (text != null && text.isNotEmpty) return text;
-    } catch (_) {}
-    return _contextualFallback(userMessage, characterName);
-  }
-
-  String _contextualFallback(String msg, String name) {
-    final lower = msg;
-    // Question
-    if (lower.contains('嗎') || lower.contains('？') || lower.contains('?') ||
-        lower.contains('什麼') || lower.contains('為什麼') || lower.contains('怎麼') || lower.contains('如何')) {
-      final q = [
-        '這個問題問得好，讓我想想…你覺得呢？',
-        '哇，你真的很會問問題耶。',
-        '嗯…這個我還沒想過，說說你的看法？',
-        '好問題！其實我自己也不太確定。',
-      ];
-      return q[lower.length % q.length];
-    }
-    // Negative emotion
-    if (lower.contains('煩') || lower.contains('難過') || lower.contains('差') ||
-        lower.contains('失敗') || lower.contains('不行') || lower.contains('糟')) {
-      final neg = [
-        '聽起來你今天不太好受…說說看，發生什麼事了？',
-        '這樣啊，感覺你有點不順。我在這裡，說吧。',
-        '哎，辛苦你了。想聊嗎？',
-      ];
-      return neg[lower.length % neg.length];
-    }
-    // Greetings
-    if (lower.contains('你好') || lower.contains('嗨') || lower.contains('hey') || lower == '哈') {
-      return '嗨！你來了喔，今天怎麼樣？';
-    }
-    // Default - varied
-    return _chatFallbacks[DateTime.now().second % _chatFallbacks.length];
-  }
-
-  // ── Gemini Image Generation (uses existing Gemini key) ────────────
-  Future<Uint8List?> generateCharacterImageGemini({
-    required String gender,
-    required bool isMirror,
-    required String bodyDesc,
-    required String skinDesc,
-    required String hairDesc,
-    required String outfitDesc,
-    String accessories = '',
-  }) async {
-    final genderWord = gender == '她' || gender == '女' ? 'female' : 'male';
-    final modeDesc = isMirror ? 'ideal romantic partner' : 'personal avatar';
-    final accDesc = accessories.isNotEmpty ? 'accessories: $accessories, ' : '';
-
-    final prompt =
-        'Generate a high quality anime style full body character illustration. '
-        '$genderWord, age 25, $bodyDesc, $skinDesc, $hairDesc, $outfitDesc, '
-        '${accDesc}$modeDesc character. '
-        'Front-facing, full body visible, soft white or pastel gradient background. '
-        'Detailed anime art style, soft lighting, no text, no watermark.';
-
-    try {
-      final url =
-          'https://generativelanguage.googleapis.com/v1beta/models/$_imageModel:generateContent?key=$_apiKey';
-      final res = await http
-          .post(
-            Uri.parse(url),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'contents': [
-                {
-                  'parts': [
-                    {'text': prompt}
-                  ]
-                }
-              ],
-              'generationConfig': {
-                'responseModalities': ['IMAGE', 'TEXT'],
-              },
-            }),
-          )
-          .timeout(const Duration(seconds: 60));
-
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        final parts = (data['candidates']?[0]?['content']?['parts'] as List?) ?? [];
-        for (final part in parts) {
-          final inlineData = part['inlineData'];
-          if (inlineData != null) {
-            return base64Decode(inlineData['data'] as String);
-          }
-        }
-      }
-    } catch (_) {}
-    return null;
+    final response = await _chatGen([Content.text(prompt)]);
+    final text = response.text?.trim();
+    if (text == null || text.isEmpty) throw Exception('Empty response from Gemini');
+    return text;
   }
 
   // ── Character Mirror Response ─────────────────────────────────
@@ -370,7 +356,6 @@ $characterName：''';
     for (final key in defaults.keys) {
       if (category.contains(key)) return defaults[key]!;
     }
-    // Generic but useful fallback (never "項目A/B/C/D")
     return ['每日練習', '技能提升', '習慣培養', '成效記錄', '目標設定'];
   }
 
@@ -443,7 +428,6 @@ $characterName：''';
 
   Map<String, dynamic>? _parseKnowledgeJson(String text) {
     try {
-      // Find the JSON object
       final start = text.indexOf('{');
       final end = text.lastIndexOf('}');
       if (start < 0 || end < 0) return null;
@@ -461,17 +445,9 @@ $characterName：''';
     }
   }
 
-  // Legacy method kept for compatibility
   Future<Map<String, String>?> generateKnowledgeQuestion(String category) async {
     final result = await generateKnowledgeQuestionParsed(category);
     if (result == null) return null;
     return {'raw': result.toString()};
-  }
-}
-
-extension _ListTakeLast<T> on List<T> {
-  List<T> takeLast(int n) {
-    if (length <= n) return this;
-    return sublist(length - n);
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../models/diary_entry.dart';
+import '../../models/bonus_challenge.dart';
 import '../knowledge/knowledge_screen.dart';
 import '../diary/diary_screen.dart';
 import '../shop/shop_screen.dart';
@@ -67,6 +68,14 @@ class HomeScreen extends StatelessWidget {
                     label: '蛋白質', value: '${provider.todayProtein.round()}g', theme: theme)),
                 ]),
                 const SizedBox(height: 16),
+                // Bonus Challenges
+                if (provider.bonusChallenges.isNotEmpty) ...[
+                  _BonusChallengesCard(
+                      challenges: provider.bonusChallenges,
+                      provider: provider,
+                      theme: theme),
+                  const SizedBox(height: 12),
+                ],
                 // Daily Knowledge Card
                 _KnowledgeTeaser(theme: theme),
                 const SizedBox(height: 12),
@@ -266,6 +275,96 @@ class _ShopTeaser extends StatelessWidget {
                   color: theme.colorScheme.onTertiaryContainer),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BonusChallengesCard extends StatelessWidget {
+  final List<BonusChallenge> challenges;
+  final AppProvider provider;
+  final ThemeData theme;
+  const _BonusChallengesCard(
+      {required this.challenges, required this.provider, required this.theme});
+
+  String _typeEmoji(String type) {
+    switch (type) {
+      case 'physical': return '🏃';
+      case 'dietary': return '🥗';
+      case 'emotional': return '💬';
+      default: return '⭐';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final doneCount = challenges.where((c) => c.done).length;
+    return Card(
+      color: theme.colorScheme.tertiaryContainer.withOpacity(0.5),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('🎯', style: TextStyle(fontSize: 18)),
+                const SizedBox(width: 8),
+                Text('今日 Bonus 挑戰',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onTertiaryContainer)),
+                const Spacer(),
+                Text('$doneCount/${challenges.length}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onTertiaryContainer
+                            .withOpacity(0.7))),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ...challenges.map((c) => GestureDetector(
+                  onTap: c.done ? null : () => provider.completeBonusChallenge(c.id),
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          c.done ? Icons.check_circle : Icons.radio_button_unchecked,
+                          size: 20,
+                          color: c.done
+                              ? Colors.green
+                              : theme.colorScheme.onTertiaryContainer,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(_typeEmoji(c.type),
+                            style: const TextStyle(fontSize: 14)),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            c.title,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: c.done
+                                  ? theme.colorScheme.onTertiaryContainer
+                                      .withOpacity(0.5)
+                                  : theme.colorScheme.onTertiaryContainer,
+                              decoration: c.done
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        if (!c.done)
+                          Text('+${c.points}',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green.shade700,
+                                  fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                )),
+          ],
         ),
       ),
     );
