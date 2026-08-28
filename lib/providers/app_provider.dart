@@ -12,7 +12,9 @@ import '../services/openai_service.dart';
 
 const _kApiKey = 'gemini_api_key';
 const _kOpenAIKey = 'openai_api_key';
-const _kDefaultApiKey = '';
+// Keys injected at build time via --dart-define (see GitHub Actions workflow)
+const _kDefaultApiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
+const _kDefaultOpenAIKey = String.fromEnvironment('OPENAI_API_KEY', defaultValue: '');
 
 enum AppState { loading, onboarding, ready }
 
@@ -29,6 +31,7 @@ class AppProvider extends ChangeNotifier {
   DiaryEntry? _todayDiary;
   VlogEntry? _todayVlog;
   List<VlogEntry> _recentVlogs = [];
+  Set<String> _ownedItems = {};
 
   bool _sendingMessage = false;
   String? _lastChatResponse;
@@ -38,9 +41,10 @@ class AppProvider extends ChangeNotifier {
   CharacterAppearance? get character => _character;
   String? get apiKey => _apiKey;
   String? get openAIKey => _openAIKey;
+  Set<String> get ownedItems => _ownedItems;
 
   OpenAIService? get openAI {
-    final key = _openAIKey ?? '';
+    final key = _openAIKey ?? _kDefaultOpenAIKey;
     if (key.isEmpty) return null;
     return OpenAIService(key);
   }
@@ -96,6 +100,7 @@ class AppProvider extends ChangeNotifier {
     _todayDiary = await DatabaseService.getDiaryForDay(_profile!.id, today);
     _character = await DatabaseService.getCharacterAppearance(_profile!.id);
     _character ??= CharacterAppearance(gender: _profile!.mirrorGender);
+    _ownedItems = await DatabaseService.getOwnedItems(_profile!.id);
     _recentVlogs = await DatabaseService.getRecentVlogs(_profile!.id, 30);
     _todayVlog = _recentVlogs.isNotEmpty &&
             _isSameDay(_recentVlogs.first.date, today)
@@ -300,8 +305,85 @@ class AppProvider extends ChangeNotifier {
   Future<bool> purchaseItem(String itemId, int price) async {
     if (_profile!.growthPoints < price) return false;
     await DatabaseService.purchaseItem(_profile!.id, itemId);
+    _ownedItems.add(itemId);
     await _addGrowthPoints(-price);
     return true;
+  }
+
+  Future<void> equipItem(String itemId) async {
+    if (_character == null || _profile == null) return;
+    final cat = itemId.split('_').first;
+    CharacterAppearance updated;
+    switch (cat) {
+      case 'outfit':
+        updated = _character!.copyWith(outfitId: itemId);
+      case 'hair':
+        updated = _character!.copyWith(outfitId: _character!.outfitId);
+      case 'acc':
+      case 'face':
+        final current = List<String>.from(_character!.accessories);
+        if (!current.contains(itemId)) current.add(itemId);
+        updated = _character!.copyWith(accessories: current);
+      case 'bg':
+        updated = _character!.copyWith(backgroundId: itemId);
+      case 'tat':
+        final current = List<String>.from(_character!.tattoos);
+        if (!current.contains(itemId)) current.add(itemId);
+        updated = _character!.copyWith(tattoos: current);
+      default:
+        updated = _character!;
+    }
+    await updateCharacterAppearance(updated);
+  }
+
+  Future<void> unequipItem(String itemId) async {
+    if (_character == null || _profile == null) return;
+    final cat = itemId.split('_').first;
+    CharacterAppearance updated;
+    switch (cat) {
+      case 'outfit':
+        updated = CharacterAppearance(
+          skinTone: _character!.skinTone,
+          hairStyle: _character!.hairStyle,
+          hairColor: _character!.hairColor,
+          faceShape: _character!.faceShape,
+          outfitId: null,
+          backgroundId: _character!.backgroundId,
+          accessories: _character!.accessories,
+          tattoos: _character!.tattoos,
+          bodyType: _character!.bodyType,
+          muscleLevel: _character!.muscleLevel,
+          fatLevel: _character!.fatLevel,
+          gender: _character!.gender,
+        );
+      case 'acc':
+      case 'face':
+        final current = List<String>.from(_character!.accessories)
+          ..remove(itemId);
+        updated = _character!.copyWith(accessories: current);
+      case 'bg':
+        updated = CharacterAppearance(
+          skinTone: _character!.skinTone,
+          hairStyle: _character!.hairStyle,
+          hairColor: _character!.hairColor,
+          faceShape: _character!.faceShape,
+          outfitId: _character!.outfitId,
+          backgroundId: null,
+          accessories: _character!.accessories,
+          tattoos: _character!.tattoos,
+          bodyType: _character!.bodyType,
+          muscleLevel: _character!.muscleLevel,
+          fatLevel: _character!.fatLevel,
+          gender: _character!.gender,
+        );
+      case 'tat':
+        final current = List<String>.from(_character!.tattoos)
+          ..remove(itemId);
+        updated = _character!.copyWith(tattoos: current);
+      default:
+        return;
+    }
+    await updateCharacterAppearance(updated);
   }
 
   Future<void> _addGrowthPoints(int delta) async {
