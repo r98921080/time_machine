@@ -98,15 +98,26 @@ class _TodayVlogTab extends StatefulWidget {
 
 class _TodayVlogTabState extends State<_TodayVlogTab> {
   bool _generating = false;
+  String? _genError;
   final _picker = ImagePicker();
 
   Future<void> _generate(AppProvider provider) async {
-    setState(() => _generating = true);
+    setState(() { _generating = true; _genError = null; });
     try {
-      await provider.generateTodayVlog();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('今日 Vlog 已生成 ✨'),
-            backgroundColor: Color(0xFF1DB954)));
+      final ok = await provider.generateTodayVlog();
+      if (!mounted) return;
+      if (ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('今日 Vlog 已生成 ✨'),
+              backgroundColor: Color(0xFF1DB954)));
+      } else {
+        setState(() => _genError = 'Vlog 生成失敗，請稍後重試');
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        setState(() => _genError = msg.length > 60 ? '${msg.substring(0, 60)}…' : msg);
+      }
     } finally {
       if (mounted) setState(() => _generating = false);
     }
@@ -131,7 +142,10 @@ class _TodayVlogTabState extends State<_TodayVlogTab> {
     final vlog = provider.todayVlog;
 
     if (vlog == null) {
-      return _EmptyState(generating: _generating, onGenerate: () => _generate(provider));
+      return _EmptyState(
+          generating: _generating,
+          error: _genError,
+          onGenerate: () => _generate(provider));
     }
 
     return _VlogArticle(
@@ -480,8 +494,9 @@ class _PhotoStrip extends StatelessWidget {
 
 class _EmptyState extends StatelessWidget {
   final bool generating;
+  final String? error;
   final VoidCallback onGenerate;
-  const _EmptyState({required this.generating, required this.onGenerate});
+  const _EmptyState({required this.generating, required this.onGenerate, this.error});
 
   @override
   Widget build(BuildContext context) {
@@ -528,6 +543,11 @@ class _EmptyState extends StatelessWidget {
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14)),
             ),
+            if (error != null) ...[
+              const SizedBox(height: 12),
+              Text(error!, textAlign: TextAlign.center,
+                  style: TextStyle(color: theme.colorScheme.error, fontSize: 12)),
+            ],
           ]),
         ),
       ),

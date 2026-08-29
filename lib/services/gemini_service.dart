@@ -4,7 +4,7 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:http/http.dart' as http;
 
 class GeminiService {
-  static const _model = 'gemini-2.0-flash';
+  static const _model = 'gemini-3.6-flash';
 
   final String _apiKey;
   final GenerativeModel _textModel;
@@ -869,10 +869,23 @@ $avoidHint
   static const _chatTimeout = Duration(seconds: 240);
 
   Future<GenerateContentResponse> _gen(List<Content> content) =>
-      _textModel.generateContent(content).timeout(_timeout);
+      _textModel.generateContent(content).timeout(_timeout).then(_checkQuota);
 
   Future<GenerateContentResponse> _chatGen(List<Content> content) =>
-      _textModel.generateContent(content).timeout(_chatTimeout);
+      _textModel.generateContent(content).timeout(_chatTimeout).then(_checkQuota);
+
+  GenerateContentResponse _checkQuota(GenerateContentResponse r) => r;
+
+  static bool isQuotaError(Object e) {
+    final msg = e.toString().toLowerCase();
+    return msg.contains('429') ||
+        msg.contains('quota') ||
+        msg.contains('resource_exhausted') ||
+        msg.contains('rate limit');
+  }
+
+  static String quotaErrorMessage() =>
+      'AI 今日使用次數已達上限。請至設定輸入您自己的 Gemini API Key 以解鎖無限使用。';
 
   Map<String, List<String>>? _parseGoalTargets(String json) {
     try {

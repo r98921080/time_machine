@@ -444,10 +444,15 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<String> completeDiary(String content) async {
-    if (_gemini == null) throw Exception('請設定 API Key');
-    return await _gemini!
-        .completeDiary(content, _profile!.nickname)
-        .timeout(const Duration(seconds: 300));
+    if (_gemini == null) throw Exception('AI 分析暫時無法使用，請稍後再試。');
+    try {
+      return await _gemini!
+          .completeDiary(content, _profile!.nickname)
+          .timeout(const Duration(seconds: 300));
+    } catch (e) {
+      if (GeminiService.isQuotaError(e)) throw Exception(GeminiService.quotaErrorMessage());
+      rethrow;
+    }
   }
 
   Future<List<String>> extractTodos(String content) async {

@@ -244,7 +244,8 @@ class _DiaryScreenState extends State<DiaryScreen> {
         setState(() => _completeError = 'AI 補完暫時無法使用，請點重試');
       }
     } catch (e) {
-      setState(() => _completeError = 'AI 補完失敗，請確認網路後點重試');
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      setState(() => _completeError = msg.length > 80 ? msg.substring(0, 80) : msg);
     } finally {
       setState(() => _completing = false);
     }

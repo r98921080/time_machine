@@ -192,13 +192,18 @@ class PollinationsService {
     ];
     final prompt = parts.join(', ');
 
-    final encoded = Uri.encodeComponent(prompt);
-    final url = '$_base/$encoded?width=512&height=896&nologo=true&seed=$seed&model=flux';
+    // Use Uri.https() so Flutter handles path encoding correctly
+    final uri = Uri.https('image.pollinations.ai', '/prompt/$prompt', {
+      'width': '512',
+      'height': '896',
+      'nologo': 'true',
+      'seed': '$seed',
+      'model': 'flux',
+    });
 
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
-        final res = await http.get(Uri.parse(url))
-            .timeout(const Duration(seconds: 120));
+        final res = await http.get(uri).timeout(const Duration(seconds: 120));
         if (res.statusCode == 200 && res.bodyBytes.length > 1000) {
           return res.bodyBytes;
         }
