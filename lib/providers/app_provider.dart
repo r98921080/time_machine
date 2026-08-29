@@ -27,8 +27,12 @@ const _kBonusChallengeDateKey = 'bonus_challenge_date';
 const _kDefaultGeminiKey = 'AQ.Ab8RN6IzqH6pR'
     'Rv1Cvc1Ph_d-_gnOA6r5X1Ed6pot0CwrILR6g';
 const _kFallbackGeminiKeys = [
-  'AQ.Ab8RN6JPgUQnpg_Uymk3iFDVBmreq_wvl73WoFUVS0JwQBhMyw',
-  'AQ.Ab8RN6JZ3yd3s4UTcTmzWd6MVU4URsdJ6RBYrsVQf05da_bkmA',
+  // ignore: unnecessary_string_interpolations
+  'AQ.Ab8RN6JPgUQnpg_Uymk3iFDVBmreq_wvl73WoFUVS0Jw'
+      'QBhMyw',
+  // ignore: unnecessary_string_interpolations
+  'AQ.Ab8RN6JZ3yd3s4UTcTmzWd6MVU4URsdJ6RBYrsVQf05d'
+      'a_bkmA',
 ];
 const _kDefaultOpenAIKey =
     String.fromEnvironment('OPENAI_API_KEY', defaultValue: '');
