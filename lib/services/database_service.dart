@@ -21,7 +21,7 @@ class DatabaseService {
 
   static Future<Database> _open() async {
     final path = join(await getDatabasesPath(), 'time_machine.db');
-    return openDatabase(path, version: 4, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    return openDatabase(path, version: 5, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -69,6 +69,23 @@ class DatabaseService {
           done INTEGER NOT NULL DEFAULT 0,
           points INTEGER NOT NULL DEFAULT 10,
           doneAt TEXT
+        )
+      ''');
+    }
+    if (oldVersion < 5) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS daily_knowledge (
+          date TEXT NOT NULL,
+          idx INTEGER NOT NULL,
+          data TEXT NOT NULL,
+          PRIMARY KEY (date, idx)
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS knowledge_streaks (
+          profileId TEXT PRIMARY KEY,
+          lastDate TEXT NOT NULL,
+          streak INTEGER NOT NULL DEFAULT 0
         )
       ''');
     }
@@ -186,6 +203,21 @@ class DatabaseService {
         correct INTEGER NOT NULL,
         answeredAt TEXT NOT NULL,
         PRIMARY KEY (profileId, questionId)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE daily_knowledge (
+        date TEXT NOT NULL,
+        idx INTEGER NOT NULL,
+        data TEXT NOT NULL,
+        PRIMARY KEY (date, idx)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE knowledge_streaks (
+        profileId TEXT PRIMARY KEY,
+        lastDate TEXT NOT NULL,
+        streak INTEGER NOT NULL DEFAULT 0
       )
     ''');
     await db.execute('''
@@ -873,5 +905,94 @@ class DatabaseService {
     await d.delete('water_entries',
         where: 'profileId = ? AND date >= ? AND date < ?',
         whereArgs: [profileId, start.toIso8601String(), end.toIso8601String()]);
+  }
+
+  // ── Daily Knowledge ───────────────────────────────────────────
+
+  static Future<void> saveDailyKnowledge(String date, int idx, Map<String, dynamic> data) async {
+    final d = await db;
+    await d.insert('daily_knowledge', {
+      'date': date,
+      'idx': idx,
+      'data': jsonEncode(data),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<List<Map<String, dynamic>>> getDailyKnowledge(String date) async {
+    final d = await db;
+    final rows = await d.query('daily_knowledge',
+        where: 'date = ?', whereArgs: [date], orderBy: 'idx ASC');
+    return rows.map((r) => jsonDecode(r['data'] as String) as Map<String, dynamic>).toList();
+  }
+
+  static Future<void> purgeDailyKnowledgeBefore(String dateStr) async {
+    final d = await db;
+    await d.delete('daily_knowledge', where: 'date < ?', whereArgs: [dateStr]);
+  }
+
+  static Future<List<String>> getRecentKnowledgeTopics(int days) async {
+    final d = await db;
+    final since = DateTime.now().subtract(Duration(days: days));
+    final sinceStr = '${since.year}-${since.month.toString().padLeft(2,'0')}-${since.day.toString().padLeft(2,'0')}';
+    final rows = await d.query('daily_knowledge',
+        where: 'date >= ?', whereArgs: [sinceStr]);
+    final topics = <String>[];
+    for (final r in rows) {
+      try {
+        final q = jsonDecode(r['data'] as String) as Map;
+        final qText = q['question'] as String? ?? '';
+        final correct = q['correct'] as String? ?? '';
+        if (qText.isNotEmpty) topics.add(qText.substring(0, qText.length.clamp(0, 20)));
+        if (correct.isNotEmpty) topics.add(correct);
+      } catch (_) {}
+    }
+    return topics;
+  }
+
+  static Future<void> saveKnowledgeAnswer(String profileId, String questionId, bool correct) async {
+    final d = await db;
+    await d.insert('knowledge_answers', {
+      'profileId': profileId,
+      'questionId': questionId,
+      'correct': correct ? 1 : 0,
+      'answeredAt': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<Map<String, bool>> getAnswersForDate(String profileId, String date) async {
+    final d = await db;
+    final rows = await d.query('knowledge_answers',
+        where: "profileId = ? AND questionId LIKE ?",
+        whereArgs: [profileId, '${date}_%']);
+    return {for (final r in rows) r['questionId'] as String: (r['correct'] as int) == 1};
+  }
+
+  static Future<int> getKnowledgeStreak(String profileId) async {
+    final d = await db;
+    final rows = await d.query('knowledge_streaks',
+        where: 'profileId = ?', whereArgs: [profileId], limit: 1);
+    if (rows.isEmpty) return 0;
+    return rows.first['streak'] as int? ?? 0;
+  }
+
+  static Future<void> updateKnowledgeStreak(String profileId, String dateStr) async {
+    final d = await db;
+    final rows = await d.query('knowledge_streaks',
+        where: 'profileId = ?', whereArgs: [profileId], limit: 1);
+    if (rows.isEmpty) {
+      await d.insert('knowledge_streaks', {
+        'profileId': profileId, 'lastDate': dateStr, 'streak': 1,
+      });
+      return;
+    }
+    final last = rows.first['lastDate'] as String;
+    final current = rows.first['streak'] as int;
+    if (last == dateStr) return;
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    final yStr = '${yesterday.year}-${yesterday.month.toString().padLeft(2,'0')}-${yesterday.day.toString().padLeft(2,'0')}';
+    final newStreak = (last == yStr) ? current + 1 : 1;
+    await d.update('knowledge_streaks',
+        {'lastDate': dateStr, 'streak': newStreak},
+        where: 'profileId = ?', whereArgs: [profileId]);
   }
 }

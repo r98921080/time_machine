@@ -18,6 +18,11 @@ class GoalsScreen extends StatelessWidget {
         title: const Text('生活目標'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.psychology_outlined),
+            tooltip: 'AI 目標回顧',
+            onPressed: () => _showGoalReview(context, provider),
+          ),
+          IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => _showAddCategorySheet(context, provider),
           ),
@@ -46,6 +51,63 @@ class GoalsScreen extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       builder: (_) => _AddCategorySheet(provider: provider),
+    );
+  }
+
+  void _showGoalReview(BuildContext context, AppProvider provider) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _GoalReviewDialog(provider: provider),
+    );
+  }
+}
+
+class _GoalReviewDialog extends StatefulWidget {
+  final AppProvider provider;
+  const _GoalReviewDialog({required this.provider});
+  @override
+  State<_GoalReviewDialog> createState() => _GoalReviewDialogState();
+}
+
+class _GoalReviewDialogState extends State<_GoalReviewDialog> {
+  String? _result;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final result = await widget.provider.reviewGoals();
+    if (mounted) setState(() { _result = result; _loading = false; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(children: [
+        Icon(Icons.psychology_outlined),
+        SizedBox(width: 8),
+        Text('AI 目標回顧'),
+      ]),
+      content: _loading
+          ? const SizedBox(
+              height: 80,
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : SingleChildScrollView(
+              child: Text(_result ?? '', style: const TextStyle(height: 1.7)),
+            ),
+      actions: [
+        if (!_loading)
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('了解了'),
+          ),
+      ],
     );
   }
 }

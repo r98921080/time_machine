@@ -16,11 +16,14 @@ class _DiaryScreenState extends State<DiaryScreen> {
   late TextEditingController _ctrl;
   bool _completing = false;
   bool _extracting = false;
+  bool _analyzingJournal = false;
+  bool _generatingMindMap = false;
   bool _saved = false;
   bool _generatingTitle = false;
   String? _aiTitle;
   String? _completeError;
   String? _lastDiaryForCompletion;
+  Map<String, dynamic>? _journalAnalysis;
 
   @override
   void initState() {
@@ -124,15 +127,14 @@ class _DiaryScreenState extends State<DiaryScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            // AI Tools Row
+            // AI Tools Row 1
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _completing ? null : () => _aiComplete(provider),
                     icon: _completing
-                        ? const SizedBox(
-                            width: 14, height: 14,
+                        ? const SizedBox(width: 14, height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.auto_fix_high, size: 16),
                     label: const Text('AI 補完'),
@@ -143,8 +145,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                   child: OutlinedButton.icon(
                     onPressed: _extracting ? null : () => _extractTodos(provider),
                     icon: _extracting
-                        ? const SizedBox(
-                            width: 14, height: 14,
+                        ? const SizedBox(width: 14, height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.checklist, size: 16),
                     label: const Text('提取待辦'),
@@ -152,6 +153,38 @@ class _DiaryScreenState extends State<DiaryScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 6),
+            // AI Tools Row 2
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _analyzingJournal ? null : () => _analyzeJournal(provider),
+                    icon: _analyzingJournal
+                        ? const SizedBox(width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.event_note, size: 16),
+                    label: const Text('行程提取'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _generatingMindMap ? null : () => _showMindMap(provider),
+                    icon: _generatingMindMap
+                        ? const SizedBox(width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.account_tree_outlined, size: 16),
+                    label: const Text('今日心智圖'),
+                  ),
+                ),
+              ],
+            ),
+            // Journal Analysis Result
+            if (_journalAnalysis != null) ...[
+              const SizedBox(height: 8),
+              _JournalAnalysisCard(analysis: _journalAnalysis!, theme: theme),
+            ],
             // Error + retry
             if (_completeError != null) ...[
               const SizedBox(height: 4),
@@ -231,6 +264,43 @@ class _DiaryScreenState extends State<DiaryScreen> {
       }
     } finally {
       setState(() => _extracting = false);
+    }
+  }
+
+  Future<void> _analyzeJournal(AppProvider provider) async {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _analyzingJournal = true);
+    try {
+      final result = await provider.analyzeJournal(text);
+      final events = (result['events'] as List?) ?? [];
+      final todos = (result['todos'] as List?) ?? [];
+      if (events.isEmpty && todos.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('日記中未發現明確的行程或待辦')));
+        return;
+      }
+      setState(() => _journalAnalysis = result);
+      // Auto-add todos from journal analysis
+      if (todos.isNotEmpty) {
+        await provider.addTodos(todos.cast<String>());
+      }
+    } finally {
+      if (mounted) setState(() => _analyzingJournal = false);
+    }
+  }
+
+  Future<void> _showMindMap(AppProvider provider) async {
+    setState(() => _generatingMindMap = true);
+    try {
+      final mindMap = await provider.generateMindMap();
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => _MindMapDialog(mindMap: mindMap),
+      );
+    } finally {
+      if (mounted) setState(() => _generatingMindMap = false);
     }
   }
 
@@ -380,6 +450,155 @@ class _TodoRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Journal Analysis Card ─────────────────────────────────────────
+
+class _JournalAnalysisCard extends StatelessWidget {
+  final Map<String, dynamic> analysis;
+  final ThemeData theme;
+  const _JournalAnalysisCard({required this.analysis, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    final events = (analysis['events'] as List?)?.cast<Map>() ?? [];
+    final todos = (analysis['todos'] as List?)?.cast<String>() ?? [];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.tertiaryContainer.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.tertiary.withOpacity(0.3)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('📅 AI 發現的行程與待辦',
+            style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onTertiaryContainer)),
+        const SizedBox(height: 8),
+        if (events.isNotEmpty) ...[
+          Text('行程', style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onTertiaryContainer.withOpacity(0.7))),
+          const SizedBox(height: 4),
+          ...events.map((e) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(children: [
+              const Icon(Icons.event, size: 14),
+              const SizedBox(width: 6),
+              Expanded(child: Text(
+                '${e['title'] ?? ''}'
+                '${(e['date'] as String?)?.isNotEmpty == true ? "  ${e['date']}" : ""}'
+                '${(e['time'] as String?)?.isNotEmpty == true ? " ${e['time']}" : ""}',
+                style: theme.textTheme.bodySmall,
+              )),
+            ]),
+          )),
+        ],
+        if (todos.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text('待辦（已自動加入）',
+              style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onTertiaryContainer.withOpacity(0.7))),
+          const SizedBox(height: 4),
+          ...todos.map((t) => Padding(
+            padding: const EdgeInsets.only(bottom: 3),
+            child: Row(children: [
+              const Icon(Icons.check_box_outline_blank, size: 14),
+              const SizedBox(width: 6),
+              Expanded(child: Text(t, style: theme.textTheme.bodySmall)),
+            ]),
+          )),
+        ],
+      ]),
+    );
+  }
+}
+
+// ── Mind Map Dialog ───────────────────────────────────────────────
+
+class _MindMapDialog extends StatelessWidget {
+  final Map<String, dynamic> mindMap;
+  const _MindMapDialog({required this.mindMap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final center = mindMap['center'] as String? ?? '今日記錄';
+    final branches = (mindMap['branches'] as List?)
+        ?.map((b) => Map<String, dynamic>.from(b as Map))
+        .toList() ?? [];
+
+    return Dialog(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            const Icon(Icons.account_tree_outlined),
+            const SizedBox(width: 8),
+            Text('今日心智圖', style: theme.textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.bold)),
+          ]),
+          const SizedBox(height: 16),
+          // Center node
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Text(center,
+                style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onPrimaryContainer)),
+          ),
+          const SizedBox(height: 12),
+          // Branches
+          ...branches.map((b) {
+            final label = b['label'] as String? ?? '';
+            final nodes = (b['nodes'] as List?)?.cast<String>() ?? [];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Container(width: 20, height: 2,
+                      color: theme.colorScheme.primary.withOpacity(0.5)),
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.secondaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(label,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSecondaryContainer)),
+                  ),
+                ]),
+                if (nodes.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 30, top: 4),
+                    child: Wrap(spacing: 6, runSpacing: 4,
+                      children: nodes.map((n) => Chip(
+                        label: Text(n, style: theme.textTheme.labelSmall),
+                        padding: EdgeInsets.zero,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      )).toList(),
+                    ),
+                  ),
+              ]),
+            );
+          }),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('關閉'),
+          ),
+        ]),
       ),
     );
   }

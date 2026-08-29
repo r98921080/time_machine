@@ -338,7 +338,7 @@ class AppProvider extends ChangeNotifier {
   // ── Chat / Food Analysis ─────────────────────────────────────
 
   Future<String?> analyzeFood(String text) async {
-    if (_gemini == null) return '請先在設定中輸入 Gemini API Key。';
+    if (_gemini == null) return 'AI 分析暫時無法使用，請稍後再試。';
     _sendingMessage = true;
     notifyListeners();
     try {
@@ -350,7 +350,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<String?> analyzeFoodImage(Uint8List bytes, String? note) async {
-    if (_gemini == null) return '請先在設定中輸入 Gemini API Key。';
+    if (_gemini == null) return 'AI 分析暫時無法使用，請稍後再試。';
     _sendingMessage = true;
     notifyListeners();
     try {
@@ -542,30 +542,43 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Character Image (Pollinations.ai) ────────────────────────
+  // ── Character Image (DALL-E 3 HD) ────────────────────────────
 
-  Future<Uint8List?> generateCharacterImagePollinations() async {
+  Future<Uint8List?> generateCharacterImage() async {
     final profile = _profile;
     final character = _character;
-    if (profile == null || character == null) return null;
+    if (profile == null) return null;
 
     final isMirror = profile.characterMode == CharacterMode.mirror;
     final gender = isMirror ? (profile.mirrorGender ?? '她') : profile.sex;
 
+    final aiService = openAI;
+    if (aiService != null) {
+      return aiService.generateCharacterImage(
+        gender: gender,
+        relationship: _relationship,
+        isMirror: isMirror,
+        appearance: character,
+      );
+    }
+    // Fallback to Pollinations if OpenAI key unavailable
     return PollinationsService.generateCharacterImage(
       gender: gender,
       isMirror: isMirror,
       relationship: _relationship,
-      skinTone: character.skinTone?.name,
-      hairStyle: character.hairStyle?.name,
-      hairColor: character.hairColor?.name,
-      muscleLevel: character.muscleLevel,
-      fatLevel: character.fatLevel,
-      outfitId: character.outfitId,
-      accessories: character.accessories,
-      tattoos: character.tattoos,
+      skinTone: character?.skinTone?.name,
+      hairStyle: character?.hairStyle?.name,
+      hairColor: character?.hairColor?.name,
+      muscleLevel: character?.muscleLevel ?? 0.0,
+      fatLevel: character?.fatLevel ?? 0.3,
+      outfitId: character?.outfitId,
+      accessories: character?.accessories ?? [],
+      tattoos: character?.tattoos ?? [],
     );
   }
+
+  // Keep alias for backward compat with any remaining callers
+  Future<Uint8List?> generateCharacterImagePollinations() => generateCharacterImage();
 
   // ── Vlog ─────────────────────────────────────────────────────
 
@@ -971,7 +984,7 @@ class AppProvider extends ChangeNotifier {
   // ── Mirror Response ──────────────────────────────────────────
 
   Future<String> getMirrorResponse() async {
-    if (_gemini == null) return '請先設定 Gemini API Key。';
+    if (_gemini == null || _profile == null) return 'AI 分析暫時無法使用，請稍後再試。';
     final target = _profile!.calculatedCalorieTarget;
     final ratio = target > 0 ? todayCalories / target : 0.0;
     return await _gemini!.getMirrorResponse(
@@ -1170,6 +1183,142 @@ class AppProvider extends ChangeNotifier {
     final entry = await DatabaseService.getVlogForDay(_profile!.id, yearAgo);
     if (entry != null) await _unlockIfNew('year_memory');
     return entry;
+  }
+
+  // ── Journal Analysis ──────────────────────────────────────────
+
+  Future<Map<String, dynamic>> analyzeJournal(String content) async {
+    if (_gemini == null) return {'events': [], 'todos': []};
+    return _gemini!.analyzeJournal(content);
+  }
+
+  // ── Mind Map ──────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> generateMindMap() async {
+    if (_gemini == null || _profile == null) {
+      return {'center': '今日記錄', 'branches': []};
+    }
+    final categories = _categories.map((c) => c.title).toList();
+    return _gemini!.generateMindMap(
+      diaryContent: _todayDiary?.content ?? '',
+      nickname: _profile!.nickname,
+      goalCategories: categories,
+      goalPoints: todayGoalPoints,
+    );
+  }
+
+  // ── Todo Prioritization ───────────────────────────────────────
+
+  Future<void> prioritizeTodos() async {
+    if (_gemini == null || _todos.isEmpty) return;
+    final pending = _todos.where((t) => !t.done).toList();
+    if (pending.isEmpty) return;
+    final input = pending.map((t) => {'id': t.id, 'content': t.content}).toList();
+    final ordered = await _gemini!.prioritizeTodos(input);
+    if (ordered.isEmpty) return;
+    final idxMap = {for (var i = 0; i < ordered.length; i++) ordered[i]: i};
+    _todos.sort((a, b) {
+      if (a.done != b.done) return a.done ? 1 : -1;
+      final ai = idxMap[a.id] ?? 999;
+      final bi = idxMap[b.id] ?? 999;
+      return ai.compareTo(bi);
+    });
+    notifyListeners();
+  }
+
+  // ── Goal Review ───────────────────────────────────────────────
+
+  Future<String> reviewGoals() async {
+    if (_gemini == null || _profile == null) return '目前尚無足夠資料，繼續記錄後 AI 將為你分析。';
+    final catData = _categories.map((c) => {'title': c.title}).toList();
+    final recentLogs = _todayLogs.map((l) => {'subItemId': l.subItemId, 'level': l.achieved.name}).toList();
+    return _gemini!.reviewGoals(
+      nickname: _profile!.nickname,
+      categories: catData,
+      recentLogs: recentLogs,
+    );
+  }
+
+  // ── Daily Knowledge Challenge ─────────────────────────────────
+
+  List<Map<String, dynamic>> _dailyKnowledge = [];
+  Map<String, bool> _knowledgeAnswers = {};
+  int _knowledgeStreak = 0;
+  bool _loadingKnowledge = false;
+
+  List<Map<String, dynamic>> get dailyKnowledge => _dailyKnowledge;
+  Map<String, bool> get knowledgeAnswers => _knowledgeAnswers;
+  int get knowledgeStreak => _knowledgeStreak;
+  bool get loadingKnowledge => _loadingKnowledge;
+
+  String get _todayDateStr {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')}';
+  }
+
+  Future<void> loadDailyKnowledge() async {
+    if (_loadingKnowledge) return;
+    final dateStr = _todayDateStr;
+
+    final cached = await DatabaseService.getDailyKnowledge(dateStr);
+    if (cached.length == 5) {
+      final answers = await DatabaseService.getAnswersForDate(_profile?.id ?? '', dateStr);
+      final streak = await DatabaseService.getKnowledgeStreak(_profile?.id ?? '');
+      _dailyKnowledge = cached;
+      _knowledgeAnswers = answers;
+      _knowledgeStreak = streak;
+      notifyListeners();
+      return;
+    }
+
+    _loadingKnowledge = true;
+    notifyListeners();
+
+    try {
+      final avoidTopics = await DatabaseService.getRecentKnowledgeTopics(30);
+      final categories = GeminiService.getDailyCategories(dateStr);
+      final questions = await _gemini!.generateDailyKnowledge(
+        dateStr: dateStr,
+        categories: categories,
+        avoidTopics: avoidTopics,
+      );
+      for (var i = 0; i < questions.length; i++) {
+        await DatabaseService.saveDailyKnowledge(dateStr, i, questions[i]);
+      }
+      // Purge questions older than 31 days
+      final cutoff = DateTime.now().subtract(const Duration(days: 31));
+      final cutoffStr = '${cutoff.year}-${cutoff.month.toString().padLeft(2,'0')}-${cutoff.day.toString().padLeft(2,'0')}';
+      await DatabaseService.purgeDailyKnowledgeBefore(cutoffStr);
+
+      final answers = await DatabaseService.getAnswersForDate(_profile?.id ?? '', dateStr);
+      final streak = await DatabaseService.getKnowledgeStreak(_profile?.id ?? '');
+      _dailyKnowledge = questions;
+      _knowledgeAnswers = answers;
+      _knowledgeStreak = streak;
+    } catch (_) {
+      _dailyKnowledge = [];
+    } finally {
+      _loadingKnowledge = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> answerKnowledge(String questionId, bool correct) async {
+    if (_profile == null) return;
+    await DatabaseService.saveKnowledgeAnswer(_profile!.id, questionId, correct);
+    _knowledgeAnswers[questionId] = correct;
+
+    // Update streak if all 5 answered correctly today
+    final dateStr = _todayDateStr;
+    final allAnswered = _dailyKnowledge.every((q) => _knowledgeAnswers.containsKey(q['id'] as String));
+    if (allAnswered) {
+      await DatabaseService.updateKnowledgeStreak(_profile!.id, dateStr);
+      _knowledgeStreak = await DatabaseService.getKnowledgeStreak(_profile!.id);
+      if (correct) await _addGrowthPoints(5);
+    } else if (correct) {
+      await _addGrowthPoints(5);
+    }
+    notifyListeners();
   }
 
   // ── Streak ────────────────────────────────────────────────────

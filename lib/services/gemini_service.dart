@@ -4,7 +4,7 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:http/http.dart' as http;
 
 class GeminiService {
-  static const _model = 'gemini-2.0-flash';
+  static const _model = 'gemini-3.6-flash';
 
   final String _apiKey;
   final GenerativeModel _textModel;
@@ -668,6 +668,195 @@ $characterName：''';
     final result = await generateKnowledgeQuestionParsed(category);
     if (result == null) return null;
     return {'raw': result.toString()};
+  }
+
+  // ── Journal Analysis ──────────────────────────────────────────
+
+  Future<Map<String, dynamic>> analyzeJournal(String diaryContent) async {
+    final prompt = '''你是一位貼心的個人助理。請閱讀以下日記內容，提取出：
+1. 可能需要安排的行程或約定（含主題、日期時間推測、地點、備註）
+2. 可能需要完成的待辦事項
+
+日記內容：
+"$diaryContent"
+
+請以 JSON 格式回傳（今日日期視為記錄當天，時間格式 HH:mm）：
+{
+  "events": [
+    {"title":"行程主題","date":"推測日期如明天/後天等用自然語言","time":"推測時間或空字串","location":"地點或空字串","note":"備註"}
+  ],
+  "todos": ["待辦1","待辦2"]
+}
+若無行程或待辦，對應陣列回傳空陣列。只輸出 JSON。''';
+    try {
+      final res = await _gen([Content.text(prompt)]);
+      final text = (res.text ?? '').replaceAll('```json', '').replaceAll('```', '').trim();
+      final start = text.indexOf('{');
+      final end = text.lastIndexOf('}');
+      if (start < 0 || end < 0) return {'events': [], 'todos': []};
+      final decoded = jsonDecode(text.substring(start, end + 1)) as Map;
+      return {
+        'events': (decoded['events'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+        'todos': List<String>.from(decoded['todos'] as List? ?? []),
+      };
+    } catch (_) {
+      return {'events': [], 'todos': []};
+    }
+  }
+
+  // ── Mind Map ──────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> generateMindMap({
+    required String diaryContent,
+    required String nickname,
+    required List<String> goalCategories,
+    required int goalPoints,
+  }) async {
+    final prompt = '''你是一位心理分析師與成長教練。請根據「$nickname」今日的資料，生成今日心智圖。
+
+資料：
+- 目標類別：${goalCategories.join('、')}
+- 今日目標積分：$goalPoints 點
+- 日記內容：${diaryContent.isNotEmpty ? '"${diaryContent.length > 300 ? diaryContent.substring(0, 300) : diaryContent}"' : '（未填寫）'}
+
+請生成心智圖結構，包含：
+- 中心主題（今日的一句話概括，10字以內）
+- 3-5 個主要分支（每個分支有 1-3 個子節點）
+
+JSON 格式：
+{
+  "center": "今日中心主題",
+  "branches": [
+    {"label": "分支名稱", "nodes": ["子節點1", "子節點2"]},
+    {"label": "分支名稱", "nodes": ["子節點1"]}
+  ]
+}
+只輸出 JSON。''';
+    try {
+      final res = await _gen([Content.text(prompt)]);
+      final text = (res.text ?? '').replaceAll('```json', '').replaceAll('```', '').trim();
+      final start = text.indexOf('{');
+      final end = text.lastIndexOf('}');
+      if (start < 0 || end < 0) return _fallbackMindMap(nickname);
+      final decoded = jsonDecode(text.substring(start, end + 1)) as Map;
+      return {
+        'center': decoded['center'] as String? ?? '今日記錄',
+        'branches': (decoded['branches'] as List? ?? [])
+            .map((b) => {
+                  'label': (b as Map)['label'] as String? ?? '',
+                  'nodes': List<String>.from(b['nodes'] as List? ?? []),
+                })
+            .toList(),
+      };
+    } catch (_) {
+      return _fallbackMindMap(nickname);
+    }
+  }
+
+  Map<String, dynamic> _fallbackMindMap(String nickname) => {
+    'center': '今天也努力了',
+    'branches': [
+      {'label': '健康', 'nodes': ['飲食記錄', '運動習慣']},
+      {'label': '目標', 'nodes': ['持續追蹤']},
+      {'label': '心情', 'nodes': ['值得被記錄']},
+    ],
+  };
+
+  // ── Todo Prioritization ───────────────────────────────────────
+
+  Future<List<String>> prioritizeTodos(List<Map<String, dynamic>> todos) async {
+    if (todos.isEmpty) return [];
+    final list = todos.map((t) => '- [${t['id']}] ${t['content']}').join('\n');
+    final prompt = '''你是一位高效能專家。請根據以下待辦事項，從重要性與緊迫性評估，回傳排序後的 ID 清單（最優先的在前）。
+
+待辦事項：
+$list
+
+只輸出 JSON 陣列，例如 ["id1","id2","id3"]，不要其他文字。''';
+    try {
+      final res = await _gen([Content.text(prompt)]);
+      final text = (res.text ?? '').replaceAll('```json', '').replaceAll('```', '').trim();
+      final start = text.indexOf('[');
+      final end = text.lastIndexOf(']');
+      if (start < 0 || end < 0) return todos.map((t) => t['id'] as String).toList();
+      final list2 = jsonDecode(text.substring(start, end + 1)) as List;
+      return list2.map((e) => e as String).toList();
+    } catch (_) {
+      return todos.map((t) => t['id'] as String).toList();
+    }
+  }
+
+  // ── Daily Knowledge Challenge ─────────────────────────────────
+
+  static const _knowledgeCategories = [
+    '自然科學', '歷史冷知識', '人體秘密', '食物真相', '動物奇聞',
+    '太空宇宙', '心理學', '數學趣味', '古文明', '科技發明',
+    '藝術音樂', '地理文化', '語言文字', '運動趣聞', '台灣文化',
+  ];
+
+  static List<String> getDailyCategories(String dateStr) {
+    var hash = 5381;
+    for (final c in dateStr.codeUnits) {
+      hash = ((hash << 5) + hash + c) & 0x7FFFFFFF;
+    }
+    final shuffled = List<String>.from(_knowledgeCategories);
+    for (var i = shuffled.length - 1; i > 0; i--) {
+      hash = ((hash << 5) + hash + i) & 0x7FFFFFFF;
+      final j = hash % (i + 1);
+      final tmp = shuffled[i];
+      shuffled[i] = shuffled[j];
+      shuffled[j] = tmp;
+    }
+    return shuffled.take(5).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> generateDailyKnowledge({
+    required String dateStr,
+    required List<String> categories,
+    List<String> avoidTopics = const [],
+  }) async {
+    final avoidHint = avoidTopics.isNotEmpty
+        ? '\n請避開以下近期已出現的主題關鍵字：${avoidTopics.take(30).join('、')}'
+        : '';
+    final prompt = '''今天是 $dateStr，請生成「每日瞎掰王知識挑戰」共 5 道題目，各題對應以下類別：
+${categories.asMap().entries.map((e) => '第${e.key + 1}題：${e.value}').join('\n')}
+$avoidHint
+
+每道題格式：
+- 題目：有趣、讓人想猜的問句
+- 正確答案：真實有趣的事實（10字以內）
+- 假答案×3：聽起來合理但錯誤（各10字以內）
+- 解析：為什麼正確答案是對的（50字以內）
+
+輸出 JSON 陣列（嚴格照格式）：
+[
+  {
+    "id": "q1",
+    "category": "類別",
+    "question": "題目",
+    "correct": "正確答案",
+    "wrong1": "假答案1",
+    "wrong2": "假答案2",
+    "wrong3": "假答案3",
+    "explanation": "解析"
+  }
+]
+只輸出 JSON 陣列，5 個元素，不要其他文字。''';
+    try {
+      final res = await _gen([Content.text(prompt)]);
+      final text = (res.text ?? '').replaceAll('```json', '').replaceAll('```', '').trim();
+      final start = text.indexOf('[');
+      final end = text.lastIndexOf(']');
+      if (start < 0 || end < 0) return [];
+      final list = jsonDecode(text.substring(start, end + 1)) as List;
+      return list.asMap().entries.map((e) {
+        final q = Map<String, dynamic>.from(e.value as Map);
+        q['id'] = '${dateStr}_q${e.key + 1}';
+        return q;
+      }).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   // ── Internal ──────────────────────────────────────────────────

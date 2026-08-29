@@ -63,7 +63,7 @@ class _CharacterScreenState extends State<CharacterScreen>
   Future<void> _generateImage(AppProvider provider) async {
     setState(() { _generatingImage = true; });
     try {
-      final bytes = await provider.generateCharacterImagePollinations();
+      final bytes = await provider.generateCharacterImage();
       if (bytes != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_imageCacheKey, base64Encode(bytes));
@@ -82,6 +82,26 @@ class _CharacterScreenState extends State<CharacterScreen>
     } finally {
       if (mounted) setState(() => _generatingImage = false);
     }
+  }
+
+  Future<void> _showMirrorResponse(AppProvider provider) async {
+    final isMirror = provider.profile?.characterMode == CharacterMode.mirror;
+    if (!isMirror) return;
+    final msg = await provider.getMirrorResponse();
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('${provider.characterName} 說…'),
+        content: Text(msg, style: const TextStyle(fontSize: 16, height: 1.6)),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('謝謝你 ♡'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showNameEditDialog(AppProvider provider) {
@@ -293,13 +313,29 @@ class _CharacterScreenState extends State<CharacterScreen>
                 Positioned(
                   bottom: 8,
                   left: 16,
-                  child: FloatingActionButton.small(
-                    heroTag: 'toggle_chat',
-                    backgroundColor: theme.colorScheme.secondaryContainer,
-                    foregroundColor: theme.colorScheme.onSecondaryContainer,
-                    onPressed: () => setState(() => _chatExpanded = !_chatExpanded),
-                    tooltip: _chatExpanded ? '顯示角色' : '展開聊天',
-                    child: Icon(_chatExpanded ? Icons.person : Icons.chat_bubble_outline),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FloatingActionButton.small(
+                        heroTag: 'toggle_chat',
+                        backgroundColor: theme.colorScheme.secondaryContainer,
+                        foregroundColor: theme.colorScheme.onSecondaryContainer,
+                        onPressed: () => setState(() => _chatExpanded = !_chatExpanded),
+                        tooltip: _chatExpanded ? '顯示角色' : '展開聊天',
+                        child: Icon(_chatExpanded ? Icons.person : Icons.chat_bubble_outline),
+                      ),
+                      if (provider.profile?.characterMode == CharacterMode.mirror) ...[
+                        const SizedBox(width: 8),
+                        FloatingActionButton.small(
+                          heroTag: 'mirror_resp',
+                          backgroundColor: theme.colorScheme.tertiaryContainer,
+                          foregroundColor: theme.colorScheme.onTertiaryContainer,
+                          onPressed: () => _showMirrorResponse(provider),
+                          tooltip: '映照視角',
+                          child: const Icon(Icons.favorite_border),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],

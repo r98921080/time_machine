@@ -11,107 +11,173 @@ class OpenAIService {
 
   Future<Uint8List?> generateCharacterImage({
     required String gender,
-    required String bodyGoal,
+    required String relationship,
     required bool isMirror,
-    required String style,
     CharacterAppearance? appearance,
-    double muscleLevel = 0.5,
-    double fatLevel = 0.5,
   }) async {
     final genderDesc = gender == '她' || gender == '女' ? 'female' : 'male';
-    final modeDesc = isMirror ? 'ideal romantic partner' : 'personal avatar';
+    final modeDesc = isMirror ? 'romantic partner character' : 'personal companion character';
 
-    // Body type from health metrics
-    String bodyDesc;
-    if (muscleLevel > 0.7 && fatLevel < 0.3) {
-      bodyDesc = 'athletic muscular toned body';
-    } else if (muscleLevel > 0.5 && fatLevel < 0.4) {
-      bodyDesc = 'fit and healthy body';
-    } else if (fatLevel > 0.6) {
-      bodyDesc = 'slightly chubby soft body, natural and cute';
-    } else {
-      bodyDesc = 'slender healthy body';
-    }
-
-    // Goal override
-    if (bodyGoal == 'loseFat') bodyDesc = 'slender and lean body';
-    if (bodyGoal == 'gainMuscle') bodyDesc = 'muscular athletic body';
-
-    // Skin tone
     final skinDesc = switch (appearance?.skinTone) {
       SkinTone.light => 'fair pale skin',
       SkinTone.medium => 'medium skin tone',
       SkinTone.tan => 'warm tan skin',
-      SkinTone.dark => 'dark skin tone',
+      SkinTone.dark => 'dark brown skin tone',
       null => 'medium skin tone',
     };
 
-    // Hair style
     final hairStyleDesc = switch (appearance?.hairStyle) {
-      HairStyle.short => 'short hair',
+      HairStyle.short => 'short neat hair',
       HairStyle.medium => 'medium-length hair',
       HairStyle.long => 'long flowing hair',
-      HairStyle.bun => 'hair tied in a bun',
-      HairStyle.ponytail => 'ponytail hair',
+      HairStyle.bun => 'elegant hair bun',
+      HairStyle.ponytail => 'ponytail hairstyle',
       HairStyle.curly => 'curly wavy hair',
       null => 'medium-length hair',
     };
 
-    // Hair color
     final hairColorDesc = switch (appearance?.hairColor) {
       HairColor.black => 'black hair',
       HairColor.brown => 'dark brown hair',
       HairColor.blonde => 'golden blonde hair',
       HairColor.red => 'auburn red hair',
       HairColor.gray => 'silver gray hair',
-      HairColor.fantasy => 'vibrant purple and blue gradient fantasy hair',
+      HairColor.fantasy => 'vibrant purple-blue gradient fantasy hair',
       null => 'black hair',
     };
 
-    // Outfit description
-    String outfitDesc = 'modern casual outfit';
-    if (appearance?.outfitId != null) {
-      outfitDesc = _outfitDescription(appearance!.outfitId!);
-    }
+    final bodyDesc = _bodyDesc(
+      appearance?.muscleLevel ?? 0.0,
+      appearance?.fatLevel ?? 0.3,
+    );
 
-    // Accessories
-    String accessoriesDesc = '';
-    if (appearance?.accessories.isNotEmpty == true) {
-      accessoriesDesc =
-          'wearing accessories: ${appearance!.accessories.join(', ')}, ';
-    }
+    final outfitDesc = _outfitDescription(appearance?.outfitId);
+    final accessoriesDesc = _accessoriesDescription(appearance?.accessories ?? []);
+    final tattoosDesc = _tattoosDescription(appearance?.tattoos ?? []);
 
-    // Tattoos / face decals
-    String tattoosDesc = '';
-    if (appearance?.tattoos.isNotEmpty == true) {
-      tattoosDesc = 'with decorative tattoo: ${appearance!.tattoos.first}, ';
-    }
+    final expressionDesc = switch (relationship) {
+      '陌生人' => 'calm neutral expression',
+      '普通朋友' => 'friendly warm smile',
+      '熟悉' => 'easy confident smile',
+      '好友' => 'bright cheerful smile',
+      '曖昧' => 'soft shy smile with gentle blush',
+      '親密' => 'radiant warm smile, affectionate gaze',
+      _ => 'gentle expression',
+    };
 
-    final prompt = 'High quality anime style full-body character illustration, '
-        '$genderDesc, age 25, $bodyDesc, $skinDesc, $hairStyleDesc in $hairColorDesc, '
-        '$outfitDesc, $accessoriesDesc$tattoosDesc'
-        '$modeDesc character, clean white or soft gradient background, '
-        'front-facing full body visible, detailed anime art style, soft lighting, '
-        'professional character design, no text, no watermark';
+    final backgroundDesc = _backgroundDescription(appearance?.outfitId, relationship);
 
-    return await _generateImage(prompt);
+    final extraParts = [
+      if (accessoriesDesc.isNotEmpty) accessoriesDesc,
+      if (tattoosDesc.isNotEmpty) tattoosDesc,
+    ].join(', ');
+
+    final prompt =
+        'masterpiece, best quality, high quality anime illustration, '
+        '$genderDesc character, age 22, $bodyDesc, $skinDesc, '
+        '$hairStyleDesc, $hairColorDesc, '
+        'wearing $outfitDesc, '
+        '${extraParts.isNotEmpty ? "$extraParts, " : ""}'
+        '$expressionDesc, $modeDesc, '
+        'full body shot standing head to toe clearly visible, facing viewer, '
+        '$backgroundDesc, '
+        'detailed anime art style, soft cinematic lighting, sharp details, '
+        'professional character design sheet, no text, no watermark, no cropping';
+
+    return await _generateImage(prompt, size: '1024x1792');
   }
 
-  String _outfitDescription(String outfitId) {
-    // Map outfit IDs to descriptions
-    const outfitMap = {
-      'school_uniform': 'Japanese school uniform',
+  static String _bodyDesc(double muscle, double fat) {
+    if (muscle > 0.65 && fat < 0.3) return 'athletic toned muscular body';
+    if (muscle > 0.45 && fat < 0.4) return 'fit healthy body';
+    if (fat > 0.65) return 'soft chubby cute body, naturally plump';
+    return 'slender healthy body';
+  }
+
+  static String _outfitDescription(String? outfitId) {
+    const map = {
+      'outfit_tshirt_white': 'clean white t-shirt with casual pants',
+      'outfit_casual_hoodie': 'oversized hoodie with comfortable pants',
+      'outfit_sport_set': 'athletic sportswear set with sneakers',
+      'outfit_denim_jacket': 'stylish denim jacket with jeans',
+      'outfit_formal_suit': 'sharp formal business suit',
+      'outfit_sundress': 'floral summer sundress with sandals',
+      'outfit_trench': 'elegant trench coat',
+      'outfit_tracksuit': 'plaid double-breasted suit',
+      'outfit_kimono': 'traditional Japanese kimono with obi',
+      'outfit_hanfu': 'elegant traditional Chinese hanfu with flowing sleeves',
+      'outfit_mage_robe': 'mysterious medieval mage robe with arcane details',
+      'outfit_knight_armor': 'shining medieval silver full plate armor',
+      'outfit_cyberpunk': 'futuristic cyberpunk neon outfit with tech accessories',
+      'outfit_ninja': 'sleek black ninja outfit',
+      'outfit_lab_coat': 'clean white lab coat over shirt',
+      'outfit_chef': 'professional chef whites with apron',
+      'outfit_space_suit': 'NASA-style space exploration suit',
+      'outfit_detective': 'Sherlock-style long detective overcoat',
+      'outfit_shrine_maiden': 'red and white shrine maiden miko outfit',
+      'outfit_pirate': 'classic pirate captain coat and hat',
+      'outfit_school_uniform': 'neat school uniform',
+      'outfit_egyptian': 'ancient Egyptian pharaoh golden ceremonial outfit',
+      'school_uniform': 'Japanese high school uniform',
       'casual_tshirt': 'casual t-shirt and jeans',
       'sporty': 'athletic sportswear',
-      'formal': 'elegant formal dress/suit',
-      'traditional': 'traditional Asian hanfu outfit',
-      'hoodie': 'cozy hoodie and sweatpants',
-      'dress': 'cute summer dress',
+      'formal': 'elegant formal dress',
+      'traditional': 'traditional hanfu with flowing sleeves',
+      'hoodie': 'oversized cozy hoodie',
+      'dress': 'cute floral summer dress',
       'suit': 'sharp business suit',
-      'gym': 'gym workout outfit',
-      'pajama': 'comfortable pajamas',
     };
-    return outfitMap[outfitId] ?? 'stylish casual outfit';
+    return map[outfitId] ?? 'stylish modern casual outfit';
+  }
+
+  static String _accessoriesDescription(List<String> accessories) {
+    const map = {
+      'round_glasses': 'round wire-frame glasses',
+      'sunglasses': 'cool sunglasses',
+      'cap': 'baseball cap',
+      'beanie': 'cozy knit beanie',
+      'earrings': 'elegant earrings',
+      'necklace': 'delicate necklace',
+      'scarf': 'soft scarf',
+      'headband': 'cute headband',
+      'watch': 'wristwatch',
+      'bracelet': 'bracelet',
+    };
+    final descs = accessories.where(map.containsKey).map((a) => 'wearing ${map[a]}').toList();
+    return descs.join(', ');
+  }
+
+  static String _tattoosDescription(List<String> tattoos) {
+    const map = {
+      'arm_tattoo': 'small tasteful arm tattoo',
+      'neck_tattoo': 'small neck tattoo',
+      'wrist_tattoo': 'wrist tattoo',
+      'back_tattoo': 'visible upper back tattoo',
+    };
+    final descs = tattoos.where(map.containsKey).map((t) => map[t]!).toList();
+    return descs.join(', ');
+  }
+
+  static String _backgroundDescription(String? outfitId, String relationship) {
+    final base = {
+      'outfit_kimono': 'cherry blossom Japanese garden',
+      'outfit_hanfu': 'classical Chinese garden with pavilion',
+      'outfit_knight_armor': 'medieval castle courtyard',
+      'outfit_cyberpunk': 'futuristic neon city night',
+      'outfit_mage_robe': 'magical library with floating books',
+      'outfit_space_suit': 'outer space station interior',
+      'outfit_shrine_maiden': 'serene Shinto shrine with torii gate',
+      'outfit_sport_set': 'modern gym or outdoor track',
+      'outfit_chef': 'bright professional kitchen',
+      'outfit_detective': 'rainy foggy London street',
+      'school_uniform': 'sakura blossom school courtyard',
+      'sporty': 'sunny outdoor park',
+      'formal': 'elegant ballroom with chandeliers',
+    }[outfitId] ?? 'soft pastel gradient studio';
+
+    if (relationship == '親密') return '$base, warm bokeh depth of field, cozy intimate atmosphere';
+    if (relationship == '曖昧') return '$base, soft romantic lighting with subtle pink tones';
+    return '$base, clean bright even lighting';
   }
 
   Future<Uint8List?> generateShopItemImage(
@@ -140,7 +206,7 @@ class OpenAIService {
     return await _generateImage(prompt);
   }
 
-  Future<Uint8List?> _generateImage(String prompt) async {
+  Future<Uint8List?> _generateImage(String prompt, {String size = '1024x1024'}) async {
     try {
       final res = await http.post(
         Uri.parse('$_base/images/generations'),
@@ -152,11 +218,12 @@ class OpenAIService {
           'model': 'dall-e-3',
           'prompt': prompt,
           'n': 1,
-          'size': '1024x1024',
-          'quality': 'standard',
+          'size': size,
+          'quality': 'hd',
+          'style': 'vivid',
           'response_format': 'b64_json',
         }),
-      );
+      ).timeout(const Duration(seconds: 120));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         final b64 = data['data'][0]['b64_json'] as String;
