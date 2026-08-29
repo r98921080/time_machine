@@ -4,7 +4,7 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:http/http.dart' as http;
 
 class GeminiService {
-  static const _model = 'gemini-3.6-flash';
+  static const _model = 'gemini-2.0-flash';
 
   final String _apiKey;
   final GenerativeModel _textModel;
@@ -294,32 +294,29 @@ ${diaryContent?.isNotEmpty == true ? '日記摘要：「${diaryContent!.substrin
     required String relationship,
   }) async {
     final goalStr = goalCategories.isNotEmpty ? goalCategories.join('、') : '一般健康目標';
-    final prompt = '''你是時光機APP的AI教練，要為使用者「$nickname」生成今天的3個Bonus小挑戰。
+    final prompt = '''你是時光機APP的AI教練，為使用者「$nickname」生成今天的3個Bonus小挑戰。
 
-使用者目標：$goal
-目標類別：$goalStr
-與角色關係：$relationship
-今日日記：${diaryContent?.isNotEmpty == true ? diaryContent : '（未填寫）'}
+使用者目標：$goal（類別：$goalStr）
+今日日記：${diaryContent?.isNotEmpty == true ? diaryContent!.substring(0, diaryContent!.length.clamp(0, 80)) : '未填寫'}
 
 請生成3個小挑戰，分別對應3種類型：
-1. physical（身體運動類）
-2. dietary（飲食健康類）
+1. physical（身體類）
+2. dietary（飲食類）
 3. emotional（情緒社交類）
 
-要求：
-- 每個挑戰要具體可執行，今天就能完成
-- 難度適中，不要太難讓人放棄，也不要太簡單
-- 用正向鼓勵的語氣
-- 每個挑戰15字以內
+⚠️ 嚴格要求：
+- 每個挑戰必須能在「今天內」用「10-30分鐘」完成，不能是長期目標
+- 要非常具體，有明確動作和數量（例：喝300ml水、走1000步）
+- 不要說「今天開始」「每天」「持續」等暗示多天的詞
+- 語氣積極、15字以內
 
-輸出JSON格式：
+JSON格式輸出：
 [
   {"type":"physical","title":"挑戰內容"},
   {"type":"dietary","title":"挑戰內容"},
   {"type":"emotional","title":"挑戰內容"}
 ]
-
-只輸出JSON陣列，不要其他文字。''';
+只輸出JSON陣列。''';
     try {
       final res = await _gen([Content.text(prompt)]);
       final text = (res.text ?? '').replaceAll('```json', '').replaceAll('```', '').trim();
@@ -402,14 +399,21 @@ ${diaryContent?.isNotEmpty == true ? '日記摘要：「${diaryContent!.substrin
 
   Future<Map<String, List<String>>?> generateGoalTargets(
       String category, String subCategory) async {
-    final prompt = '''為「$category - $subCategory」生成三個難度層次的具體目標。
-格式（嚴格照以下JSON輸出）：
+    final prompt = '''為「$category - $subCategory」生成三個難度層次的「每日目標」。
+
+⚠️ 核心原則：
+- 三個難度都必須是「當日可完成」的，不是長期目標
+- 要具體、有數字，讓使用者知道今天做到什麼就算完成
+- Mini = 忙碌時最低標準，5-10分鐘可完成
+- Advanced = 正常努力，20-40分鐘完成
+- Elite = 充分投入，1小時以內完成
+
+JSON格式（嚴格輸出）：
 {
-  "mini": ["入門目標（容易達到，適合初學者）"],
-  "advanced": ["進階目標（需要努力，有挑戰性）"],
-  "elite": ["精英目標（高標準，需要持續努力）"]
+  "mini": ["入門每日標準（有數字）"],
+  "advanced": ["進階每日標準（有數字）"],
+  "elite": ["精英每日標準（有數字）"]
 }
-每個難度只給1個具體目標描述，要有數字或明確標準，不要限定在固定分鐘數，用自然語言描述。
 只輸出JSON。''';
     try {
       final res = await _gen([Content.text(prompt)]);
@@ -861,8 +865,8 @@ $avoidHint
 
   // ── Internal ──────────────────────────────────────────────────
 
-  static const _timeout = Duration(seconds: 90);
-  static const _chatTimeout = Duration(seconds: 180);
+  static const _timeout = Duration(seconds: 120);
+  static const _chatTimeout = Duration(seconds: 240);
 
   Future<GenerateContentResponse> _gen(List<Content> content) =>
       _textModel.generateContent(content).timeout(_timeout);

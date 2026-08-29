@@ -171,14 +171,6 @@ class PollinationsService {
       if (tatDesc.isNotEmpty) tatDesc,
     ].join(', ');
 
-    final prompt =
-        'high quality anime illustration, $genderWord, age 22, '
-        '$body, $skin, $hair, wearing $outfit, '
-        '${extraDetails.isNotEmpty ? "$extraDetails, " : ""}'
-        '$expression, $modeHint, $framingHint, facing viewer, '
-        '$background, detailed anime art style, '
-        'soft lighting, sharp details, no text, no watermark, masterpiece quality';
-
     final seed = _appearanceSeed(
       skin: skinTone,
       hairStyle: hairStyle,
@@ -187,16 +179,33 @@ class PollinationsService {
       accessories: accessories,
       tattoos: tattoos,
     );
-    final encoded = Uri.encodeComponent(prompt);
-    final url = '$_base/$encoded?width=512&height=896&nologo=true&seed=$seed';
 
-    try {
-      final res = await http.get(Uri.parse(url))
-          .timeout(const Duration(seconds: 90));
-      if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
-        return res.bodyBytes;
+    // Build a concise prompt to keep URL short
+    final parts = [
+      'anime illustration', genderWord, 'age 22',
+      body, skin, hair,
+      'wearing $outfit',
+      if (extraDetails.isNotEmpty) extraDetails,
+      expression, framingHint,
+      background,
+      'masterpiece, no text',
+    ];
+    final prompt = parts.join(', ');
+
+    final encoded = Uri.encodeComponent(prompt);
+    final url = '$_base/$encoded?width=512&height=896&nologo=true&seed=$seed&model=flux';
+
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final res = await http.get(Uri.parse(url))
+            .timeout(const Duration(seconds: 120));
+        if (res.statusCode == 200 && res.bodyBytes.length > 1000) {
+          return res.bodyBytes;
+        }
+      } catch (_) {
+        if (attempt == 0) await Future.delayed(const Duration(seconds: 3));
       }
-    } catch (_) {}
+    }
     return null;
   }
 }
