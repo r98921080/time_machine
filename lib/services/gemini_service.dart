@@ -6,14 +6,27 @@ import 'package:http/http.dart' as http;
 class GeminiService {
   static const _model = 'gemini-3.6-flash';
 
-  final String _apiKey;
-  final GenerativeModel _textModel;
-  final GenerativeModel _visionModel;
+  final List<String> _apiKeys;
+  int _keyIndex = 0;
+  late GenerativeModel _textModel;
+  late GenerativeModel _visionModel;
 
-  GeminiService(String apiKey)
-      : _apiKey = apiKey,
-        _textModel = GenerativeModel(model: _model, apiKey: apiKey),
-        _visionModel = GenerativeModel(model: _model, apiKey: apiKey);
+  GeminiService(String primaryKey, {List<String> fallbackKeys = const []})
+      : _apiKeys = [primaryKey, ...fallbackKeys] {
+    _initModels();
+  }
+
+  void _initModels() {
+    _textModel = GenerativeModel(model: _model, apiKey: _apiKeys[_keyIndex]);
+    _visionModel = GenerativeModel(model: _model, apiKey: _apiKeys[_keyIndex]);
+  }
+
+  bool _rotateKey() {
+    if (_apiKeys.length <= 1) return false;
+    _keyIndex = (_keyIndex + 1) % _apiKeys.length;
+    _initModels();
+    return true;
+  }
 
   // ── Food Analysis ────────────────────────────────────────────
 
@@ -887,12 +900,26 @@ $avoidHint
   static const _chatTimeout = Duration(seconds: 240);
 
   Future<GenerateContentResponse> _gen(List<Content> content) =>
-      _textModel.generateContent(content).timeout(_timeout).then(_checkQuota);
+      _genWithRotation(content, _timeout);
 
   Future<GenerateContentResponse> _chatGen(List<Content> content) =>
-      _textModel.generateContent(content).timeout(_chatTimeout).then(_checkQuota);
+      _genWithRotation(content, _chatTimeout);
 
-  GenerateContentResponse _checkQuota(GenerateContentResponse r) => r;
+  Future<GenerateContentResponse> _genWithRotation(
+      List<Content> content, Duration timeout) async {
+    for (var attempt = 0; attempt < _apiKeys.length; attempt++) {
+      try {
+        return await _textModel.generateContent(content).timeout(timeout);
+      } catch (e) {
+        if (isQuotaError(e) && attempt < _apiKeys.length - 1) {
+          _rotateKey();
+          continue;
+        }
+        rethrow;
+      }
+    }
+    throw Exception(quotaErrorMessage());
+  }
 
   static bool isQuotaError(Object e) {
     final msg = e.toString().toLowerCase();
