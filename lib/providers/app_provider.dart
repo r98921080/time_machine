@@ -24,8 +24,8 @@ const _kMemorySummaryPrefix = 'chat_memory_summary_';
 const _kBonusChallengeDateKey = 'bonus_challenge_date';
 
 // ignore: unnecessary_string_interpolations
-const _kDefaultGeminiKey = 'AQ.Ab8RN6Ji8Vdt'
-    'JtvN-m3Rns1XNCeYsf0K1Vp1iCBmNdVVSMyr8A';
+const _kDefaultGeminiKey = 'AQ.Ab8RN6IzqH6pR'
+    'Rv1Cvc1Ph_d-_gnOA6r5X1Ed6pot0CwrILR6g';
 const _kDefaultOpenAIKey =
     String.fromEnvironment('OPENAI_API_KEY', defaultValue: '');
 
