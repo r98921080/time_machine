@@ -1,12 +1,10 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import '../../providers/app_provider.dart';
 import '../../models/character.dart';
 import '../../models/user_profile.dart';
 import '../../models/chat_message.dart';
+import '../../widgets/doll_character.dart';
 import '../shop/shop_screen.dart';
 import '../achievements/achievements_screen.dart';
 
@@ -21,9 +19,6 @@ class _CharacterScreenState extends State<CharacterScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _idleCtrl;
   late Animation<double> _idleAnim;
-  Uint8List? _characterImage;
-  bool _generatingImage = false;
-  static const _imageCacheKey = 'character_ai_image_v2';
 
   final TextEditingController _msgCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
@@ -41,7 +36,6 @@ class _CharacterScreenState extends State<CharacterScreen>
       ..repeat(reverse: true);
     _idleAnim = Tween(begin: -4.0, end: 4.0).animate(
         CurvedAnimation(parent: _idleCtrl, curve: Curves.easeInOut));
-    _loadCachedImage();
   }
 
   @override
@@ -50,38 +44,6 @@ class _CharacterScreenState extends State<CharacterScreen>
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadCachedImage() async {
-    final prefs = await SharedPreferences.getInstance();
-    final b64 = prefs.getString(_imageCacheKey);
-    if (b64 != null && b64.isNotEmpty && mounted) {
-      setState(() => _characterImage = base64Decode(b64));
-    }
-  }
-
-  Future<void> _generateImage(AppProvider provider) async {
-    setState(() { _generatingImage = true; });
-    try {
-      final bytes = await provider.generateCharacterImage();
-      if (bytes != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_imageCacheKey, base64Encode(bytes));
-        if (mounted) setState(() => _characterImage = bytes);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('⚠️ 圖片生成失敗，請稍後再試')));
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('⚠️ 生成錯誤：$e')));
-      }
-    } finally {
-      if (mounted) setState(() => _generatingImage = false);
-    }
   }
 
   Future<void> _showMirrorResponse(AppProvider provider) async {
@@ -279,36 +241,13 @@ class _CharacterScreenState extends State<CharacterScreen>
                     offset: Offset(0, _idleAnim.value),
                     child: child,
                   ),
-                  child: _characterImage != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.memory(
-                            _characterImage!,
-                            width: _chatExpanded ? 100 : 180,
-                            height: _chatExpanded ? 140 : 260,
-                            fit: BoxFit.cover,
-                          ),
-                        )
-                      : _PlaceholderCharacter(
-                          isMirror: isMirror,
-                          gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
-                          compact: _chatExpanded,
-                          theme: theme,
-                        ),
-                ),
-                Positioned(
-                  bottom: 8,
-                  right: 16,
-                  child: _generatingImage
-                      ? const SizedBox(
-                          width: 36, height: 36,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : FloatingActionButton.small(
-                          heroTag: 'gen_char',
-                          onPressed: () => _generateImage(provider),
-                          tooltip: 'AI 生成角色圖片',
-                          child: const Icon(Icons.auto_awesome),
-                        ),
+                  child: DollCharacterWidget(
+                    appearance: character,
+                    gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
+                    isMirror: isMirror,
+                    width:  _chatExpanded ? 100 : 190,
+                    height: _chatExpanded ? 160 : 290,
+                  ),
                 ),
                 Positioned(
                   bottom: 8,
@@ -708,50 +647,6 @@ class _ChatInput extends StatelessWidget {
                     foregroundColor: theme.colorScheme.onPrimary,
                   ),
                 ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Placeholder when no AI image yet ─────────────────────────────────
-class _PlaceholderCharacter extends StatelessWidget {
-  final bool isMirror;
-  final String gender;
-  final bool compact;
-  final ThemeData theme;
-  const _PlaceholderCharacter(
-      {required this.isMirror,
-      required this.gender,
-      required this.compact,
-      required this.theme});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: compact ? 90 : 180,
-      height: compact ? 130 : 250,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.outlineVariant, width: 2),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            isMirror ? (gender == '她' ? '👩' : '👨') : '🙂',
-            style: TextStyle(fontSize: compact ? 32 : 52),
-          ),
-          if (!compact) ...[
-            const SizedBox(height: 12),
-            Text(
-              '點擊 ✨\n生成角色圖',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ],
         ],
       ),
     );
