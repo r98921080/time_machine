@@ -969,6 +969,41 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  /// On-demand: analyse the user's CURRENT app data and append a proactive
+  /// advice message. Triggered by the "產生今日建議" button (no user bubble).
+  Future<String> generateTodayAdvice() async {
+    if (_gemini == null || _profile == null) throw Exception('API Key 未設定');
+    _chatting = true;
+    notifyListeners();
+    try {
+      final historyForAI = _chatHistory
+          .where((m) => m.role == 'user' || m.role == 'character')
+          .map((m) => {'role': m.role, 'content': m.content})
+          .toList();
+      final ctx = await _buildAdvisorContext();
+      final reply = await _gemini!.chatWithAdvisor(
+        nickname: _profile!.nickname,
+        history: historyForAI,
+        userMessage:
+            '（系統請求）請根據我目前的 App 數據——飲食熱量、目標達成、日記——主動幫我做一次今日健康快檢，'
+            '先用一句話總結今天狀態，再給我 2-3 個「今天就能執行」的具體建議，最後可用一個問題邀請我聊下去。',
+        context: ctx,
+        memorySummary: null,
+      );
+      final aiMsg = CharacterChatMessage(
+        profileId: _profile!.id,
+        role: 'character',
+        content: reply,
+      );
+      _chatHistory.add(aiMsg);
+      await DatabaseService.saveChatMessage(aiMsg);
+      return reply;
+    } finally {
+      _chatting = false;
+      notifyListeners();
+    }
+  }
+
   /// Clears the advisor/chat conversation without touching legacy
   /// character-relationship state.
   Future<void> clearChatHistory() async {

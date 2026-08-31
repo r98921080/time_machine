@@ -59,6 +59,21 @@ class _AssistantScreenState extends State<AssistantScreen> {
     _scrollToBottom();
   }
 
+  /// One-tap: let the advisor analyse the current app data and post advice.
+  Future<void> _generateAdvice(AppProvider provider) async {
+    if (provider.chatting) return;
+    _scrollToBottom();
+    try {
+      await provider.generateTodayAdvice();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('產生建議失敗：$e')),
+      );
+    }
+    _scrollToBottom();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -101,11 +116,17 @@ class _AssistantScreenState extends State<AssistantScreen> {
       ),
       body: Column(
         children: [
-          _ContextBar(provider: provider),
+          _ContextBar(
+            provider: provider,
+            onGenerate:
+                provider.chatting ? null : () => _generateAdvice(provider),
+          ),
           Expanded(
             child: messages.isEmpty
                 ? _EmptyState(
                     onPick: (s) => _send(provider, s),
+                    onGenerate:
+                        provider.chatting ? null : () => _generateAdvice(provider),
                     suggestions: _suggestions,
                   )
                 : ListView.builder(
@@ -161,7 +182,8 @@ class _AssistantScreenState extends State<AssistantScreen> {
 /// 頂部今日狀態列：讓使用者一眼看到顧問正在參考的資料。
 class _ContextBar extends StatelessWidget {
   final AppProvider provider;
-  const _ContextBar({required this.provider});
+  final VoidCallback? onGenerate;
+  const _ContextBar({required this.provider, this.onGenerate});
 
   @override
   Widget build(BuildContext context) {
@@ -173,7 +195,7 @@ class _ContextBar extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
       color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.4),
       child: Row(
         children: [
@@ -191,6 +213,16 @@ class _ContextBar extends StatelessWidget {
                     hasDiary ? '今日已寫日記' : '今日未寫日記'),
               ],
             ),
+          ),
+          const SizedBox(width: 6),
+          FilledButton.tonalIcon(
+            onPressed: onGenerate,
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              visualDensity: VisualDensity.compact,
+            ),
+            icon: const Icon(Icons.auto_awesome, size: 16),
+            label: const Text('AI 建議'),
           ),
         ],
       ),
@@ -221,8 +253,10 @@ class _ContextBar extends StatelessWidget {
 
 class _EmptyState extends StatelessWidget {
   final void Function(String) onPick;
+  final VoidCallback? onGenerate;
   final List<String> suggestions;
-  const _EmptyState({required this.onPick, required this.suggestions});
+  const _EmptyState(
+      {required this.onPick, required this.onGenerate, required this.suggestions});
 
   @override
   Widget build(BuildContext context) {
@@ -244,7 +278,29 @@ class _EmptyState extends StatelessWidget {
           style: theme.textTheme.bodyMedium
               ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 24),
+        FilledButton.icon(
+          onPressed: onGenerate,
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+          icon: const Icon(Icons.auto_awesome, size: 18),
+          label: const Text('產生今日建議'),
+        ),
+        const SizedBox(height: 20),
+        Row(children: [
+          const Expanded(child: Divider()),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text('或直接問',
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ),
+          const Expanded(child: Divider()),
+        ]),
+        const SizedBox(height: 16),
         ...suggestions.map((s) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: OutlinedButton(
