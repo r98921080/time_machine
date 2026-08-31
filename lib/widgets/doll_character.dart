@@ -1347,15 +1347,6 @@ class _DollPainter extends CustomPainter {
     }
   }
 
-  // ── utility ───────────────────────────────────────────────────────────────
-
-  Color _lighten(Color c, double a) => HSLColor.fromColor(c)
-      .withLightness((HSLColor.fromColor(c).lightness + a).clamp(0.0, 1.0))
-      .toColor();
-  Color _darken(Color c, double a) => HSLColor.fromColor(c)
-      .withLightness((HSLColor.fromColor(c).lightness - a).clamp(0.0, 1.0))
-      .toColor();
-
   @override
   bool shouldRepaint(_DollPainter old) =>
       old.appearance != appearance ||
