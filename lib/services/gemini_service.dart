@@ -894,6 +894,98 @@ $avoidHint
     }
   }
 
+  // ── Personal Advisor Chat ────────────────────────────────────
+
+  Future<String> chatWithAdvisor({
+    required String nickname,
+    required List<Map<String, String>> history,
+    required String userMessage,
+    required Map<String, dynamic> context,
+    String? memorySummary,
+  }) async {
+    final buf = StringBuffer();
+
+    final cal = (context['todayCalories'] as num?)?.round() ?? 0;
+    final target = (context['targetCalories'] as num?)?.round() ?? 0;
+    final pts = context['todayGoalPoints'] ?? 0;
+    final diary = (context['todayDiary'] as String?) ?? '';
+    buf.writeln('【今日狀態】');
+    buf.writeln('- 熱量攝取：$cal / ${target > 0 ? target : '未設定'} kcal');
+    buf.writeln('- 今日目標達成點數：$pts');
+    if (diary.isNotEmpty) {
+      final d = diary.length > 120 ? '${diary.substring(0, 120)}…' : diary;
+      buf.writeln('- 今日日記：「$d」');
+    }
+
+    final week = (context['weeklyCalories'] as List?) ?? const [];
+    if (week.isNotEmpty) {
+      final line =
+          week.map((d) => ((d['calories'] as num?) ?? 0).round()).join(', ');
+      buf.writeln('- 近7日熱量：[$line] kcal');
+    }
+
+    final goals = (context['goals'] as List?) ?? const [];
+    if (goals.isNotEmpty) {
+      buf.writeln('【正在追蹤的目標】${goals.join('、')}');
+    }
+
+    final gc = (context['weeklyGoalCompletions'] as List?) ?? const [];
+    if (gc.isNotEmpty) {
+      final total =
+          gc.fold<int>(0, (s, e) => s + ((e['completions'] as int?) ?? 0));
+      buf.writeln('- 近7日目標達成共 $total 次（${gc.length} 天有記錄）');
+    }
+
+    final diaries = (context['recentDiaries'] as List?) ?? const [];
+    if (diaries.isNotEmpty) {
+      buf.writeln('【近期日記摘要】');
+      for (final d in diaries) {
+        final mood = d['mood'] != null ? '（心情:${d['mood']}）' : '';
+        buf.writeln('- ${d['date']}$mood：${d['snippet']}');
+      }
+    }
+
+    final streak = context['loginStreak'];
+    if (streak is int && streak > 0) {
+      buf.writeln('- 連續使用天數：$streak 天');
+    }
+
+    String histStr = '';
+    if (memorySummary != null && memorySummary.isNotEmpty) {
+      histStr = '【過往對話重點】\n$memorySummary\n\n';
+    }
+    final recent =
+        history.length > 40 ? history.sublist(history.length - 40) : history;
+    if (recent.isNotEmpty) {
+      histStr +=
+          '【近期對話】\n${recent.map((h) => '${h['role'] == 'user' ? '使用者' : '顧問'}：${h['content']}').join('\n')}\n\n';
+    }
+
+    final prompt = '''你是「$nickname」的專屬私人健康與生活顧問，一個人整合了「營養師 × 私人教練 × 習慣養成教練 × 心理支持」四種專業。
+
+你的任務是根據使用者的真實數據（飲食熱量、目標達成、日記、作息），提供**專業、具體、可執行**的建議，並像一位值得信任的顧問一樣與他自然對談。
+
+使用者資料：
+${buf.toString()}
+$histStr使用者現在說：「$userMessage」
+
+回應原則：
+- 先直接回應他說的內容或問題，不要打太極、不要複述。
+- 建議要具體、可執行、有依據（份量、時間、次數、原理），避免空泛口號。
+- 適時引用他的真實數據佐證（如熱量偏高、目標連續達成），但不要每次都硬塞數據。
+- 若資訊不足以給到位建議，主動問一個關鍵問題再給建議。
+- 專業但溫暖，繁體中文口語，像真人顧問。一般回應 150 字內；使用者要求詳細規劃時可長一些。
+- 不要用「嗯」「好的」「我了解了」「辛苦了」這類空洞開頭。
+- 誠實：不確定就說不確定，不編造數據；不做醫療診斷，必要時建議尋求專業醫療協助。
+
+你的回應：''';
+
+    final response = await _chatGen([Content.text(prompt)]);
+    final text = response.text?.trim();
+    if (text == null || text.isEmpty) throw Exception('Empty response from Gemini');
+    return text;
+  }
+
   // ── Internal ──────────────────────────────────────────────────
 
   static const _timeout = Duration(seconds: 120);

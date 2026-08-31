@@ -882,6 +882,102 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  // ── Personal Advisor Chat ────────────────────────────────────
+
+  Future<Map<String, dynamic>> _buildAdvisorContext() async {
+    final id = _profile!.id;
+    List<DiaryEntry> recentDiaries = const [];
+    List<Map<String, dynamic>> weekly = const [];
+    List<Map<String, dynamic>> goalComp = const [];
+    try {
+      recentDiaries = await DatabaseService.getRecentDiaries(id, 5);
+    } catch (_) {}
+    try {
+      weekly = await DatabaseService.getWeeklyData(id);
+    } catch (_) {}
+    try {
+      goalComp = await DatabaseService.getWeeklyGoalCompletion(id);
+    } catch (_) {}
+
+    return {
+      'todayCalories': todayCalories,
+      'targetCalories': _profile!.calculatedCalorieTarget,
+      'todayGoalPoints': todayGoalPoints,
+      'todayDiary': _todayDiary?.content ?? '',
+      'weeklyCalories': weekly,
+      'weeklyGoalCompletions': goalComp,
+      'goals': _categories.map((c) => c.title).toList(),
+      'loginStreak': _profile!.loginStreak,
+      'recentDiaries': recentDiaries.map((d) => {
+            'date': '${d.date.month}/${d.date.day}',
+            'mood': d.mood,
+            'snippet': d.content.length > 60
+                ? '${d.content.substring(0, 60)}…'
+                : d.content,
+          }).toList(),
+    };
+  }
+
+  /// Professional personal-advisor chat. Reuses the same chat history store
+  /// as the (now-retired) character chat, but drives a consultant persona
+  /// with rich diary / calorie / goal context.
+  Future<String> sendAdvisorMessage(String userText) async {
+    if (_gemini == null || _profile == null) throw Exception('API Key 未設定');
+    _chatting = true;
+    notifyListeners();
+
+    final userMsg = CharacterChatMessage(
+      profileId: _profile!.id,
+      role: 'user',
+      content: userText,
+    );
+    _chatHistory.add(userMsg);
+    await DatabaseService.saveChatMessage(userMsg);
+    notifyListeners();
+
+    try {
+      final historyForAI = _chatHistory
+          .where((m) => m.role == 'user' || m.role == 'character')
+          .map((m) => {'role': m.role, 'content': m.content})
+          .toList();
+
+      String? memorySummary;
+      if (historyForAI.length > 50) {
+        memorySummary = await _getOrBuildMemorySummary(historyForAI);
+      }
+
+      final ctx = await _buildAdvisorContext();
+      final reply = await _gemini!.chatWithAdvisor(
+        nickname: _profile!.nickname,
+        history: historyForAI,
+        userMessage: userText,
+        context: ctx,
+        memorySummary: memorySummary,
+      );
+
+      final aiMsg = CharacterChatMessage(
+        profileId: _profile!.id,
+        role: 'character',
+        content: reply,
+      );
+      _chatHistory.add(aiMsg);
+      await DatabaseService.saveChatMessage(aiMsg);
+      return reply;
+    } finally {
+      _chatting = false;
+      notifyListeners();
+    }
+  }
+
+  /// Clears the advisor/chat conversation without touching legacy
+  /// character-relationship state.
+  Future<void> clearChatHistory() async {
+    if (_profile == null) return;
+    await DatabaseService.clearChatHistory(_profile!.id);
+    _chatHistory = [];
+    notifyListeners();
+  }
+
   Future<String?> _getOrBuildMemorySummary(List<Map<String, String>> allHistory) async {
     final prefs = await SharedPreferences.getInstance();
     final key = '$_kMemorySummaryPrefix${_profile!.id}';
