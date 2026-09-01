@@ -358,6 +358,10 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
     try {
       return await _gemini!.analyzeFood(text);
+    } catch (e) {
+      return GeminiService.isQuotaError(e)
+          ? GeminiService.quotaErrorMessage()
+          : '分析失敗，請確認網路後再試一次 🙏';
     } finally {
       _sendingMessage = false;
       notifyListeners();
@@ -370,6 +374,10 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
     try {
       return await _gemini!.analyzeFoodImage(bytes, note);
+    } catch (e) {
+      return GeminiService.isQuotaError(e)
+          ? GeminiService.quotaErrorMessage()
+          : '照片分析失敗，請確認網路後再試一次 🙏';
     } finally {
       _sendingMessage = false;
       notifyListeners();

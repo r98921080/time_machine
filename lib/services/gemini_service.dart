@@ -65,12 +65,14 @@ class GeminiService {
     final prompt = note?.isNotEmpty == true
         ? '$_foodSystemPrompt\n\n這是使用者拍的食物照片，補充說明：$note'
         : '$_foodSystemPrompt\n\n請分析照片中的食物。';
-    final response = await _visionModel.generateContent([
+    // Use the rotation-capable generator so quota errors fail over to the
+    // next key instead of throwing immediately.
+    final response = await _gen([
       Content.multi([
         DataPart('image/jpeg', imageBytes),
         TextPart(prompt),
       ]),
-    ]).timeout(_timeout);
+    ]);
     return response.text ?? '無法分析，請稍後再試。';
   }
 

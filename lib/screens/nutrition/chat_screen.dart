@@ -100,29 +100,32 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _ctrl.text.trim();
     if (text.isEmpty && _pendingImage == null) return;
 
-    final userMsg = _pendingImage != null
+    // Capture the image locally, then clear the pending selection IMMEDIATELY
+    // so the UI can never get stuck on "selected" if analysis fails.
+    final Uint8List? imageBytes = _pendingImageBytes;
+    final bool hasImage = imageBytes != null;
+    final userMsg = hasImage
         ? '📷 ${text.isEmpty ? '請分析這張照片的食物' : text}'
         : text;
 
     setState(() {
       _messages.add(_Message(role: 'user', text: userMsg));
       _ctrl.clear();
+      _pendingImage = null;
+      _pendingImageBytes = null;
     });
     _scrollToBottom();
 
     String? response;
-    if (_pendingImageBytes != null) {
-      response = await provider.analyzeFoodImage(
-          _pendingImageBytes!, text.isEmpty ? null : text);
-      setState(() {
-        _pendingImage = null;
-        _pendingImageBytes = null;
-      });
-    } else {
-      response = await provider.analyzeFood(text);
+    try {
+      response = hasImage
+          ? await provider.analyzeFoodImage(imageBytes!, text.isEmpty ? null : text)
+          : await provider.analyzeFood(text);
+    } catch (_) {
+      response = '分析失敗，請稍後再試一次 🙏';
     }
 
-    if (response != null) {
+    if (response != null && mounted) {
       setState(() => _messages.add(_Message(role: 'ai', text: response!)));
       _scrollToBottom();
     }
