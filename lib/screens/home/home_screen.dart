@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../models/diary_entry.dart';
 import '../../models/bonus_challenge.dart';
+import '../../models/user_profile.dart';
 import '../knowledge/knowledge_screen.dart';
 import '../diary/diary_screen.dart';
 import '../vlog/vlog_screen.dart';
@@ -360,6 +361,10 @@ class _HomeTab extends StatelessWidget {
         ),
         const SizedBox(height: 10),
 
+        // ── Growth level (personal EXP) ─────────────────────────
+        _GrowthLevelCard(exp: profile.characterExp, theme: theme),
+        const SizedBox(height: 10),
+
         // ── Morning Intent ──────────────────────────────────────
         _MorningIntentCard(
           intent: profile.morningIntent,
@@ -375,13 +380,11 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 10),
 
         // ── Bonus challenges ────────────────────────────────────
-        if (provider.bonusChallenges.isNotEmpty) ...[
-          _BonusChallengesCard(
-              challenges: provider.bonusChallenges,
-              provider: provider,
-              theme: theme),
-          const SizedBox(height: 10),
-        ],
+        _BonusChallengesCard(
+            challenges: provider.bonusChallenges,
+            provider: provider,
+            theme: theme),
+        const SizedBox(height: 10),
 
         // ── Vlog card ───────────────────────────────────────────
         _VlogCard(provider: provider, theme: theme),
@@ -754,34 +757,160 @@ class _BonusChallengesCard extends StatelessWidget {
             Text('今日 Bonus 挑戰', style: theme.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.bold)),
             const Spacer(),
-            Text('$doneCount/${challenges.length}',
-                style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant)),
+            if (challenges.isNotEmpty)
+              Text('$doneCount/${challenges.length}',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant)),
           ]),
           const SizedBox(height: 10),
-          ...challenges.map((c) => GestureDetector(
-            onTap: c.done ? null : () => provider.completeBonusChallenge(c.id),
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(children: [
-                Icon(c.done ? Icons.check_circle : Icons.radio_button_unchecked,
-                    size: 20, color: c.done ? Colors.green : null),
-                const SizedBox(width: 8),
-                Text(_typeEmoji(c.type), style: const TextStyle(fontSize: 14)),
-                const SizedBox(width: 4),
-                Expanded(child: Text(c.title, style: theme.textTheme.bodySmall?.copyWith(
-                    decoration: c.done ? TextDecoration.lineThrough : null,
-                    color: c.done ? theme.colorScheme.onSurfaceVariant : null))),
-                if (!c.done)
-                  Text('+${c.points}', style: TextStyle(
-                      fontSize: 11, color: Colors.green.shade700,
-                      fontWeight: FontWeight.bold)),
-              ]),
-            ),
-          )),
+          if (challenges.isEmpty)
+            _GenerateChallengesButton(provider: provider, theme: theme)
+          else
+            ...challenges.map((c) => GestureDetector(
+              onTap: c.done ? null : () => provider.completeBonusChallenge(c.id),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  Icon(c.done ? Icons.check_circle : Icons.radio_button_unchecked,
+                      size: 20, color: c.done ? Colors.green : null),
+                  const SizedBox(width: 8),
+                  Text(_typeEmoji(c.type), style: const TextStyle(fontSize: 14)),
+                  const SizedBox(width: 4),
+                  Expanded(child: Text(c.title, style: theme.textTheme.bodySmall?.copyWith(
+                      decoration: c.done ? TextDecoration.lineThrough : null,
+                      color: c.done ? theme.colorScheme.onSurfaceVariant : null))),
+                  if (!c.done)
+                    Text('+${c.points}', style: TextStyle(
+                        fontSize: 11, color: Colors.green.shade700,
+                        fontWeight: FontWeight.bold)),
+                ]),
+              ),
+            )),
         ]),
       ),
     );
+  }
+}
+
+class _GrowthLevelCard extends StatelessWidget {
+  final int exp;
+  final ThemeData theme;
+  const _GrowthLevelCard({required this.exp, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    final lv = growthLevel(exp);
+    final title = growthTitle(exp);
+    final base = growthLevelBase(exp);
+    final next = growthNextExp(exp);
+    final maxed = next < 0;
+    final span = (next - base);
+    final ratio = maxed || span <= 0
+        ? 1.0
+        : ((exp - base) / span).clamp(0.0, 1.0);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text('Lv$lv',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onPrimaryContainer)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text('成長等級 · $title',
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.bold)),
+                  Text(maxed ? '已達最高等級 🎉' : '再 ${next - exp} EXP 升級',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant)),
+                ])),
+            Text('$exp EXP',
+                style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary)),
+          ]),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: ratio,
+              minHeight: 7,
+              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+              valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text('完成目標與挑戰會累積 EXP，提升你的成長等級。',
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ]),
+      ),
+    );
+  }
+}
+
+class _GenerateChallengesButton extends StatefulWidget {
+  final AppProvider provider;
+  final ThemeData theme;
+  const _GenerateChallengesButton(
+      {required this.provider, required this.theme});
+
+  @override
+  State<_GenerateChallengesButton> createState() =>
+      _GenerateChallengesButtonState();
+}
+
+class _GenerateChallengesButtonState extends State<_GenerateChallengesButton> {
+  bool _loading = false;
+
+  Future<void> _gen() async {
+    setState(() => _loading = true);
+    try {
+      await widget.provider.generateBonusChallengesForToday();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('產生挑戰失敗：$e')));
+      }
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      Text('今天還沒有挑戰，讓 AI 依你的目標出 3 個當日小挑戰吧！',
+          style: widget.theme.textTheme.bodySmall
+              ?.copyWith(color: widget.theme.colorScheme.onSurfaceVariant)),
+      const SizedBox(height: 10),
+      SizedBox(
+        width: double.infinity,
+        child: FilledButton.tonalIcon(
+          onPressed: _loading ? null : _gen,
+          icon: _loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.auto_awesome, size: 18),
+          label: Text(_loading ? '生成中…' : '產生今日挑戰'),
+        ),
+      ),
+    ]);
   }
 }
 

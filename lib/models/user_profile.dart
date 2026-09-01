@@ -47,6 +47,41 @@ int nextRelationshipExp(int exp) {
   return -1; // maxed out
 }
 
+// ── Personal growth level (repurposed from task EXP) ──────────────
+// 完成目標 / 打卡累積的 EXP，反映使用者自己的成長，不再是「角色關係」。
+const growthLevelTitles = [
+  '初心者', '習慣養成', '穩定前進', '漸入佳境', '自律達人', '卓越者', '時光大師',
+];
+const growthExpThresholds = [0, 100, 300, 600, 1000, 1500, 2200];
+
+int growthLevel(int exp) {
+  int lv = 1;
+  for (int i = 0; i < growthExpThresholds.length; i++) {
+    if (exp >= growthExpThresholds[i]) lv = i + 1;
+  }
+  return lv;
+}
+
+String growthTitle(int exp) =>
+    growthLevelTitles[(growthLevel(exp) - 1).clamp(0, growthLevelTitles.length - 1)];
+
+/// EXP floor of the current level.
+int growthLevelBase(int exp) {
+  int base = 0;
+  for (final t in growthExpThresholds) {
+    if (exp >= t) base = t;
+  }
+  return base;
+}
+
+/// EXP needed to reach next level, or -1 if maxed out.
+int growthNextExp(int exp) {
+  for (final t in growthExpThresholds) {
+    if (exp < t) return t;
+  }
+  return -1;
+}
+
 class UserProfile {
   final String id;
   String nickname;

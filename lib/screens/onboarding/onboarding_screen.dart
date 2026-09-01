@@ -51,7 +51,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: [
                       _buildStep0(theme),
                       _buildStep1(theme),
-                      _buildStep2(theme),
                       _buildStep3(theme),
                     ][_step],
                   ),
@@ -161,71 +160,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _buildStep2(ThemeData theme) {
-    return Column(
-      key: const ValueKey(2),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('角色設定', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 4),
-        Text('選擇你的角色模式',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-        const SizedBox(height: 24),
-        _ModeCard(
-          title: '自我成長',
-          subtitle: '角色反映你自己的身體變化和進步',
-          emoji: '💪',
-          selected: _charMode == CharacterMode.self,
-          onTap: () => setState(() => _charMode = CharacterMode.self),
-          theme: theme,
-        ),
-        const SizedBox(height: 12),
-        _ModeCard(
-          title: '映照',
-          subtitle: '角色是你理想中的對象，你的進步讓TA變得更完美',
-          emoji: '💕',
-          selected: _charMode == CharacterMode.mirror,
-          onTap: () => setState(() => _charMode = CharacterMode.mirror),
-          theme: theme,
-        ),
-        if (_charMode == CharacterMode.mirror) ...[
-          const SizedBox(height: 16),
-          Text('映照對象的性別', style: theme.textTheme.labelMedium),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _mirrorGender = '她'),
-                  child: _GenderCard(
-                      label: '她', selected: _mirrorGender == '她', theme: theme),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _mirrorGender = '他'),
-                  child: _GenderCard(
-                      label: '他', selected: _mirrorGender == '他', theme: theme),
-                ),
-              ),
-            ],
-          ),
-        ],
-        const SizedBox(height: 32),
-        Row(children: [
-          Expanded(
-              child: OutlinedButton(
-                  onPressed: () => setState(() => _step = 1),
-                  child: const Text('上一步'))),
-          const SizedBox(width: 12),
-          Expanded(child: _NextButton(onTap: () => setState(() => _step = 3))),
-        ]),
-      ],
-    );
-  }
-
   Widget _buildStep3(ThemeData theme) {
     return Column(
       key: const ValueKey(3),
@@ -239,9 +173,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         const SizedBox(height: 32),
         _SummaryRow('目標', _goal.label, theme),
         _SummaryRow('性別', _sex, theme),
-        _SummaryRow('角色模式',
-            _charMode == CharacterMode.self ? '自我成長' : '映照（$_mirrorGender）',
-            theme),
         const SizedBox(height: 40),
         _loading
             ? const Center(child: CircularProgressIndicator())
@@ -251,7 +182,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
         const SizedBox(height: 12),
         OutlinedButton(
-            onPressed: () => setState(() => _step = 2),
+            onPressed: () => setState(() => _step = 1),
             child: const Text('上一步')),
       ],
     );
@@ -288,7 +219,7 @@ class _WelcomeText extends StatelessWidget {
             style: theme.textTheme.headlineMedium
                 ?.copyWith(fontWeight: FontWeight.bold,
                     color: theme.colorScheme.primary)),
-        Text('生活目標 × 飲食記錄 × 角色養成',
+        Text('生活目標 × 飲食記錄 × AI 顧問',
             style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant)),
       ],
@@ -307,7 +238,7 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(4, (i) {
+        children: List.generate(3, (i) {
           final active = i == step;
           final done = i < step;
           return AnimatedContainer(
