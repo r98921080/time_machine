@@ -494,6 +494,40 @@ class _DollPainter extends CustomPainter {
     final skS2  = _skinShad2(skin);
     final skHi  = _skinHi(skin);
 
+    // Soft ambient lighting aura behind character
+    final auraRect = Rect.fromCenter(
+      center: Offset(cx, headCy + headRy * 2.2),
+      width: sw * 0.88,
+      height: sh * 0.70,
+    );
+    canvas.drawOval(
+      auraRect,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            (isMirror ? const Color(0xFFF472B6) : const Color(0xFF818CF8)).withOpacity(0.18),
+            Colors.transparent,
+          ],
+        ).createShader(auraRect),
+    );
+
+    // Ground shadow beneath feet for physical presence
+    final shadowRect = Rect.fromCenter(
+      center: Offset(cx, footBotY + 2.0),
+      width: sw * 0.52,
+      height: sh * 0.035,
+    );
+    canvas.drawOval(
+      shadowRect,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFF1E1B4B).withOpacity(0.24),
+            const Color(0xFF1E1B4B).withOpacity(0.0),
+          ],
+        ).createShader(shadowRect),
+    );
+
     // Paint order: back hair → body skin → outfit → head → front hair → face → accessories
     _paintHairBack(canvas, cx, headCy, headRx, headRy, sh, lw);
     _paintBody(canvas, cx, sh, sw, skin, skS1, skS2, skHi, lw,
@@ -1259,6 +1293,31 @@ class _DollPainter extends CustomPainter {
     _celFill(canvas, capPath, hair, shad: hairSh, shadPath: capShad,
              hi: hairHi, hiPath: capHi, lw: lw);
 
+    // Angel halo glossy shine band across hair
+    final haloPath = Path()
+      ..moveTo(cx - headRx * 0.70, headCy - headRy * (topFrac + 0.04))
+      ..quadraticBezierTo(cx, headCy - headRy * (topFrac + 0.18), cx + headRx * 0.70, headCy - headRy * (topFrac + 0.04))
+      ..quadraticBezierTo(cx, headCy - headRy * (topFrac + 0.10), cx - headRx * 0.70, headCy - headRy * (topFrac + 0.04))
+      ..close();
+    final haloRect = Rect.fromCenter(
+      center: Offset(cx, headCy - headRy * (topFrac + 0.10)),
+      width: headRx * 1.5,
+      height: headRy * 0.35,
+    );
+    canvas.drawPath(
+      haloPath,
+      Paint()
+        ..shader = LinearGradient(
+          colors: [
+            hairHi.withOpacity(0.0),
+            hairHi.withOpacity(0.70),
+            Colors.white.withOpacity(0.85),
+            hairHi.withOpacity(0.70),
+            hairHi.withOpacity(0.0),
+          ],
+        ).createShader(haloRect),
+    );
+
     if (curly) {
       // Extra curl bumps along hairline
       for (var i = 0; i < 6; i++) {
@@ -1285,7 +1344,7 @@ class _DollPainter extends CustomPainter {
     final mouthY = headCy + headRy * 0.74;
     final eyeGap = sw * 0.135;
 
-    // Eyebrows — arched, thick
+    // Eyebrows — arched, refined
     for (final side in [-1.0, 1.0]) {
       final bx = cx + side * eyeGap;
       canvas.drawPath(
@@ -1302,10 +1361,10 @@ class _DollPainter extends CustomPainter {
     _paintEye(canvas, Offset(cx - eyeGap, eyeY), sw, lw, false);
     _paintEye(canvas, Offset(cx + eyeGap, eyeY), sw, lw, true);
 
-    // Nose — two subtle shadow dots
-    final noseP = Paint()..color = _skinShad1(_skin).withOpacity(0.45);
-    canvas.drawCircle(Offset(cx - 3.5, noseY), 1.8, noseP);
-    canvas.drawCircle(Offset(cx + 3.5, noseY), 1.8, noseP);
+    // Nose — subtle soft shadow dot
+    final noseP = Paint()..color = _skinShad1(_skin).withOpacity(0.40);
+    canvas.drawCircle(Offset(cx - 3.0, noseY), 1.6, noseP);
+    canvas.drawCircle(Offset(cx + 3.0, noseY), 1.6, noseP);
 
     // Mouth — defined upper + lower lip
     final lipTop = Paint()
@@ -1333,14 +1392,31 @@ class _DollPainter extends CustomPainter {
         ..strokeWidth = lw * 0.65
         ..strokeCap = StrokeCap.round);
 
-    // Blush — cel-style, slightly transparent
-    final blushP = Paint()..color = const Color(0xFFF78C8C).withOpacity(0.36);
+    // Soft gradient blush + cute anime blush lines (///)
     for (final side in [-1.0, 1.0]) {
+      final bCenter = Offset(cx + side * eyeGap * 1.35, eyeY + headRy * 0.24);
+      final bRect = Rect.fromCenter(center: bCenter, width: eyeGap * 1.15, height: headRy * 0.32);
       canvas.drawOval(
-        Rect.fromCenter(
-            center: Offset(cx + side * eyeGap * 1.44, eyeY + headRy * 0.24),
-            width: eyeGap * 0.95, height: headRy * 0.24),
-        blushP);
+        bRect,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              const Color(0xFFFF6B81).withOpacity(0.45),
+              const Color(0xFFFF6B81).withOpacity(0.0),
+            ],
+          ).createShader(bRect),
+      );
+      // Delicate diagonal anime blush marks
+      final mPaint = Paint()
+        ..color = const Color(0xFFE11D48).withOpacity(0.38)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = lw * 0.45
+        ..strokeCap = StrokeCap.round;
+      for (int m = -1; m <= 1; m++) {
+        final mx = bCenter.dx + m * 3.5;
+        final my = bCenter.dy;
+        canvas.drawLine(Offset(mx - 2.0, my + 3.0), Offset(mx + 2.0, my - 3.0), mPaint);
+      }
     }
   }
 
@@ -1359,12 +1435,37 @@ class _DollPainter extends CustomPainter {
           ..strokeWidth = lw * 1.15
           ..strokeCap = StrokeCap.round,
       );
+      final lowerArc = Path()
+        ..moveTo(center.dx - ew * 0.35, center.dy + 1.5)
+        ..quadraticBezierTo(center.dx, center.dy - eh * 0.35, center.dx + ew * 0.35, center.dy + 1.5);
+      canvas.drawPath(
+        lowerArc,
+        Paint()
+          ..color = _outline.withOpacity(0.5)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = lw * 0.70
+          ..strokeCap = StrokeCap.round,
+      );
       return;
     }
 
-    final accent = isMirror ? const Color(0xFFDB2777) : const Color(0xFF4F46E5);
-    final ew = sw * 0.100;
-    final eh = sw * 0.088 * (1.0 - blinkProgress * 0.85);
+    final accent = isMirror ? const Color(0xFFEC4899) : const Color(0xFF6366F1);
+    final ew = sw * 0.102;
+    final eh = sw * 0.090 * (1.0 - blinkProgress * 0.85);
+
+    // Double eyelid crease
+    final creasePaint = Paint()
+      ..color = _darken(_skin, 0.22).withOpacity(0.42)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = lw * 0.50
+      ..strokeCap = StrokeCap.round;
+    final cY = center.dy - eh * 0.64;
+    canvas.drawPath(
+      Path()
+        ..moveTo(center.dx - ew * 0.42, cY + 1.2)
+        ..quadraticBezierTo(center.dx, cY - 2.0, center.dx + ew * 0.42, cY + 0.8),
+      creasePaint,
+    );
 
     // Upper eyelid shadow area
     canvas.drawOval(
@@ -1375,7 +1476,7 @@ class _DollPainter extends CustomPainter {
     // White sclera
     canvas.drawOval(
       Rect.fromCenter(center: center, width: ew, height: eh),
-      Paint()..color = const Color(0xFFF6F6FA));
+      Paint()..color = const Color(0xFFF8FAFC));
 
     // Lower sclera shadow
     canvas.save();
@@ -1384,40 +1485,63 @@ class _DollPainter extends CustomPainter {
     canvas.drawOval(
       Rect.fromCenter(center: Offset(center.dx, center.dy + eh * 0.28),
                       width: ew * 0.90, height: eh * 0.45),
-      Paint()..color = const Color(0xFFD0D4EE).withOpacity(0.50));
+      Paint()..color = const Color(0xFFCBD5E1).withOpacity(0.40));
     canvas.restore();
 
-    // Iris gradient (3 layers for depth)
+    // Multi-tier Anime Gem Iris Gradient
+    final irisRect = Rect.fromCenter(center: center, width: ew * 0.74, height: eh * 0.92);
     canvas.drawOval(
-      Rect.fromCenter(center: center, width: ew * 0.70, height: eh * 0.90),
-      Paint()..color = _lighten(accent, 0.18));
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(center.dx, center.dy + eh * 0.06),
-                      width: ew * 0.56, height: eh * 0.72),
-      Paint()..color = accent);
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(center.dx, center.dy + eh * 0.12),
-                      width: ew * 0.34, height: eh * 0.50),
-      Paint()..color = _darken(accent, 0.18));
-
-    // Pupil
-    canvas.drawCircle(center, ew * 0.155, Paint()..color = const Color(0xFF060610));
-
-    // Main catch light
-    canvas.drawCircle(
-      Offset(center.dx - (isRight ? ew * 0.18 : -ew * 0.18), center.dy - eh * 0.28),
-      ew * 0.135, Paint()..color = Colors.white);
-
-    // Secondary catch light
-    canvas.drawCircle(
-      Offset(center.dx + (isRight ? -ew * 0.26 : ew * 0.26), center.dy + eh * 0.16),
-      ew * 0.060, Paint()..color = Colors.white.withOpacity(0.70));
-
-    // Iris rim line (gives glass-like depth)
-    canvas.drawOval(
-      Rect.fromCenter(center: center, width: ew * 0.70, height: eh * 0.90),
+      irisRect,
       Paint()
-        ..color = _darken(accent, 0.10).withOpacity(0.55)
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF0F172A),
+            _darken(accent, 0.18),
+            accent,
+            _lighten(accent, 0.25),
+          ],
+        ).createShader(irisRect),
+    );
+
+    // Lower luminous reflection crescent
+    final glowRect = Rect.fromCenter(
+      center: Offset(center.dx, center.dy + eh * 0.20),
+      width: ew * 0.58,
+      height: eh * 0.42,
+    );
+    canvas.drawOval(
+      glowRect,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            _lighten(accent, 0.38).withOpacity(0.85),
+            Colors.transparent,
+          ],
+        ).createShader(glowRect),
+    );
+
+    // Deep pupil
+    canvas.drawCircle(center, ew * 0.155, Paint()..color = const Color(0xFF020617));
+
+    // Sparkling primary catch light
+    final pCatch = Offset(center.dx - (isRight ? ew * 0.18 : -ew * 0.18), center.dy - eh * 0.26);
+    canvas.drawCircle(pCatch, ew * 0.13, Paint()..color = Colors.white);
+
+    // Secondary soft catch light
+    final sCatch = Offset(center.dx + (isRight ? -ew * 0.24 : ew * 0.24), center.dy + eh * 0.16);
+    canvas.drawCircle(sCatch, ew * 0.065, Paint()..color = Colors.white.withOpacity(0.90));
+
+    // Star sparkle highlight (Tiny diamond twinkle)
+    final starCatch = Offset(center.dx, center.dy + eh * 0.28);
+    canvas.drawCircle(starCatch, ew * 0.040, Paint()..color = Colors.white.withOpacity(0.80));
+
+    // Iris glass rim line
+    canvas.drawOval(
+      irisRect,
+      Paint()
+        ..color = _darken(accent, 0.15).withOpacity(0.55)
         ..style = PaintingStyle.stroke
         ..strokeWidth = lw * 0.40);
 

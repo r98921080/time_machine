@@ -494,151 +494,303 @@ class _ShopCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Rarity classification
+    final bool isSSR = item.isLimited;
+    final bool isSR = !isSSR && item.price >= 120;
+    final bool isR = !isSSR && !isSR && item.price >= 50;
+
+    final rarityColor = isSSR
+        ? const Color(0xFFF59E0B) // Amber Gold
+        : isSR
+            ? const Color(0xFFA855F7) // Purple
+            : isR
+                ? const Color(0xFF06B6D4) // Cyan
+                : const Color(0xFF10B981); // Emerald
+
+    final rarityTag = isSSR
+        ? 'SSR 典藏'
+        : isSR
+            ? 'SR 華麗'
+            : isR
+                ? 'R 精選'
+                : '經典';
+
     return Card(
       clipBehavior: Clip.antiAlias,
-      elevation: equipped ? 4 : 1,
-      shape: equipped
-          ? RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: theme.colorScheme.primary, width: 2))
-          : RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: equipped ? 4 : 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: equipped
+              ? theme.colorScheme.primary
+              : isSSR
+                  ? const Color(0xFFF59E0B).withOpacity(0.55)
+                  : isSR
+                      ? const Color(0xFFA855F7).withOpacity(0.40)
+                      : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+          width: equipped ? 2.2 : (isSSR || isSR ? 1.5 : 1),
+        ),
+      ),
       child: InkWell(
         onTap: onTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Preview area
+            // ── Luxury Boutique Showcase Area ──
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: equipped
-                        ? [
-                            theme.colorScheme.primaryContainer,
-                            theme.colorScheme.primary.withOpacity(0.3),
-                          ]
-                        : [
-                            theme.colorScheme.surfaceContainerHighest,
-                            theme.colorScheme.surfaceContainerHigh,
-                          ],
+                  gradient: RadialGradient(
+                    center: const Alignment(0, -0.2),
+                    radius: 0.9,
+                    colors: [
+                      rarityColor.withOpacity(isDark ? 0.22 : 0.14),
+                      isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                    ],
                   ),
                 ),
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    Text(item.emoji, style: const TextStyle(fontSize: 52)),
-                    if (item.isLimited)
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text('限定',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    if (item.unlockCondition != null && !owned)
-                      Positioned(
-                        bottom: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.55),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.lock, size: 10, color: Colors.white),
-                              SizedBox(width: 3),
-                              Text('解鎖任務',
-                                  style: TextStyle(
-                                      color: Colors.white, fontSize: 9)),
+                    // Glowing circular stage / pedestal beneath item
+                    Positioned(
+                      bottom: 12,
+                      child: Container(
+                        width: 72,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: rarityColor.withOpacity(0.45),
+                              blurRadius: 16,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                          gradient: RadialGradient(
+                            colors: [
+                              rarityColor.withOpacity(0.5),
+                              rarityColor.withOpacity(0.0),
                             ],
                           ),
                         ),
                       ),
+                    ),
+                    // Item Icon with 3D drop shadow
+                    Transform.translate(
+                      offset: const Offset(0, -6),
+                      child: Text(
+                        item.emoji,
+                        style: TextStyle(
+                          fontSize: 54,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withOpacity(0.20),
+                              offset: const Offset(0, 8),
+                              blurRadius: 12,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // Rarity Ribbon Tag
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              rarityColor,
+                              rarityColor.withOpacity(0.85),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: rarityColor.withOpacity(0.35),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          rarityTag,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Equipped glowing badge
                     if (equipped)
                       Positioned(
-                        top: 6,
-                        left: 6,
+                        top: 8,
+                        right: 8,
                         child: Container(
-                          padding: const EdgeInsets.all(3),
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primary,
-                            shape: BoxShape.circle,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: theme.colorScheme.primary.withOpacity(0.4),
+                                blurRadius: 6,
+                              ),
+                            ],
                           ),
-                          child: const Icon(Icons.check,
-                              size: 12, color: Colors.white),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check, size: 10, color: Colors.white),
+                              SizedBox(width: 3),
+                              Text(
+                                '已裝備',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    // Unlock condition tag
+                    if (item.unlockCondition != null && !owned)
+                      Positioned(
+                        bottom: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.68),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.lock, size: 10, color: Colors.amber),
+                              SizedBox(width: 4),
+                              Text(
+                                '任務成就解鎖',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                   ],
                 ),
               ),
             ),
-            // Info area
-            Padding(
-              padding: const EdgeInsets.all(10),
+            // ── Info Area ──
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              color: isDark ? const Color(0xFF1E293B) : Colors.white,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.name,
-                      style: theme.textTheme.labelLarge
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  Text(item.description,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 6),
+                  Text(
+                    item.name,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    item.description,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
-                      if (item.price > 0)
-                        const Icon(Icons.star, size: 13, color: Colors.amber),
-                      if (item.price > 0) const SizedBox(width: 2),
-                      Text(
-                        owned
-                            ? '已擁有'
-                            : item.price == 0
-                                ? '任務解鎖'
-                                : '${item.price}',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: owned
-                              ? Colors.green
-                              : item.price == 0
-                                  ? Colors.purple
-                                  : canAfford
-                                      ? Colors.amber.shade700
-                                      : Colors.grey,
+                      if (owned)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check_circle_outline, size: 12, color: Colors.green),
+                              SizedBox(width: 3),
+                              Text(
+                                '已擁有',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else if (item.price == 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            '成就解鎖',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.purple,
+                            ),
+                          ),
+                        )
+                      else
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Color(0xFFF59E0B),
+                              ),
+                              child: const Icon(Icons.star, size: 10, color: Colors.white),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${item.price}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: canAfford ? const Color(0xFFD97706) : Colors.grey,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
                       const Spacer(),
                       if (equipped)
-                        Icon(Icons.check_circle,
-                            size: 18, color: theme.colorScheme.primary)
+                        Icon(Icons.check_circle, size: 18, color: theme.colorScheme.primary)
                       else if (owned)
-                        Icon(Icons.check_circle_outline,
-                            size: 18, color: theme.colorScheme.primary)
-                      else if (item.unlockCondition != null && item.price == 0)
-                        const Icon(Icons.lock_outline,
-                            size: 18, color: Colors.purple)
+                        Icon(Icons.touch_app_outlined, size: 17, color: theme.colorScheme.primary)
                       else if (!canAfford)
-                        const Icon(Icons.lock_outline,
-                            size: 18, color: Colors.grey),
+                        const Icon(Icons.lock_outline, size: 16, color: Colors.grey)
+                      else
+                        const Icon(Icons.add_shopping_cart, size: 16, color: Color(0xFFD97706)),
                     ],
                   ),
                 ],

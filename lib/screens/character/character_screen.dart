@@ -222,19 +222,49 @@ class _CharacterScreenState extends State<CharacterScreen>
           // ── Character image area ──────────────────────────────────
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            height: _chatExpanded ? 160 : 280,
+            height: _chatExpanded ? 160 : 295,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+              gradient: RadialGradient(
+                center: const Alignment(0, -0.3),
+                radius: 1.15,
                 colors: isMirror
-                    ? [theme.colorScheme.secondaryContainer, theme.colorScheme.surface]
-                    : [theme.colorScheme.primaryContainer, theme.colorScheme.surface],
+                    ? [
+                        theme.colorScheme.secondaryContainer.withOpacity(0.85),
+                        theme.colorScheme.surface,
+                      ]
+                    : [
+                        theme.colorScheme.primaryContainer.withOpacity(0.85),
+                        theme.colorScheme.surface,
+                      ],
               ),
             ),
             child: Stack(
               alignment: Alignment.center,
               children: [
+                // Glowing circular pedestal
+                Positioned(
+                  bottom: _chatExpanded ? 14 : 22,
+                  child: Container(
+                    width: _chatExpanded ? 90 : 165,
+                    height: _chatExpanded ? 18 : 30,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: (isMirror ? const Color(0xFFF472B6) : const Color(0xFF818CF8)).withOpacity(0.35),
+                          blurRadius: 20,
+                          spreadRadius: 4,
+                        ),
+                      ],
+                      gradient: RadialGradient(
+                        colors: [
+                          (isMirror ? const Color(0xFFF472B6) : const Color(0xFF818CF8)).withOpacity(0.40),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
                 AnimatedBuilder(
                   animation: _idleAnim,
                   builder: (_, child) => Transform.translate(
@@ -245,8 +275,35 @@ class _CharacterScreenState extends State<CharacterScreen>
                     appearance: character,
                     gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
                     isMirror: isMirror,
-                    width:  _chatExpanded ? 100 : 190,
-                    height: _chatExpanded ? 160 : 290,
+                    width: _chatExpanded ? 100 : 195,
+                    height: _chatExpanded ? 160 : 295,
+                    enableAnimation: true,
+                    interactive: true,
+                    onTap: () async {
+                      final quote = await provider.interactWithCharacter();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('$charName：$quote'),
+                            duration: const Duration(seconds: 3),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ),
+                Positioned(
+                  top: 12,
+                  right: 14,
+                  child: FilledButton.tonalIcon(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: () => _showCustomizeSheet(context, provider, character),
+                    icon: const Icon(Icons.checkroom, size: 16),
+                    label: const Text('自訂外觀', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   ),
                 ),
                 Positioned(
