@@ -12,6 +12,7 @@ import '../models/bonus_challenge.dart';
 import '../models/achievement.dart';
 
 class DatabaseService {
+  static const int _dbVersion = 5;
   static Database? _db;
 
   static Future<Database> get db async {
@@ -21,7 +22,7 @@ class DatabaseService {
 
   static Future<Database> _open() async {
     final path = join(await getDatabasesPath(), 'time_machine.db');
-    return openDatabase(path, version: 5, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    return openDatabase(path, version: _dbVersion, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   static Future<void> _onCreate(Database db, int version) async {
