@@ -4,12 +4,26 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:http/http.dart' as http;
 
 class GeminiService {
-  static const _model = 'gemini-3.6-flash';
+  static const _model = 'gemini-1.5-flash';
 
   final List<String> _apiKeys;
   int _keyIndex = 0;
   late GenerativeModel _textModel;
   late GenerativeModel _visionModel;
+
+  /// Test whether a given API key is valid and working with Gemini
+  static Future<bool> testApiKey(String apiKey) async {
+    if (apiKey.trim().isEmpty) return false;
+    try {
+      final model = GenerativeModel(model: _model, apiKey: apiKey.trim());
+      final res = await model
+          .generateContent([Content.text('Ping')])
+          .timeout(const Duration(seconds: 8));
+      return res.text != null && res.text!.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
 
   GeminiService(String primaryKey, {List<String> fallbackKeys = const []})
       : _apiKeys = [primaryKey, ...fallbackKeys] {

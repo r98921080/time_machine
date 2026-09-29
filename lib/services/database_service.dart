@@ -995,4 +995,77 @@ class DatabaseService {
         {'lastDate': dateStr, 'streak': newStreak},
         where: 'profileId = ?', whereArgs: [profileId]);
   }
+
+  // ── Backup & Restore ──────────────────────────────────────────
+  static const _backupTables = [
+    'profiles',
+    'characters',
+    'meals',
+    'goal_categories',
+    'goal_tasks',
+    'daily_goal_logs',
+    'diary_entries',
+    'vlog_entries',
+    'owned_items',
+    'chat_messages',
+    'todos',
+    'bonus_challenges',
+    'daily_knowledge',
+    'knowledge_streaks',
+    'achievements',
+    'mood_entries',
+    'energy_entries',
+    'morning_intents',
+    'water_entries',
+    'knowledge_answers',
+  ];
+
+  static Future<Map<String, dynamic>> exportAllData() async {
+    final d = await db;
+    final Map<String, dynamic> backup = {
+      'version': _dbVersion,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'tables': <String, dynamic>{},
+    };
+
+    for (final table in _backupTables) {
+      try {
+        final rows = await d.query(table);
+        (backup['tables'] as Map<String, dynamic>)[table] = rows;
+      } catch (_) {
+        // Table might not exist or be empty, skip safely
+      }
+    }
+    return backup;
+  }
+
+  static Future<bool> importAllData(Map<String, dynamic> backup) async {
+    final tables = backup['tables'] as Map<String, dynamic>?;
+    if (tables == null) return false;
+
+    final d = await db;
+    await d.transaction((txn) async {
+      for (final entry in tables.entries) {
+        final tableName = entry.key;
+        final rows = entry.value as List?;
+        if (rows == null || rows.isEmpty) continue;
+
+        try {
+          await txn.delete(tableName);
+          for (final row in rows) {
+            if (row is Map) {
+              await txn.insert(
+                tableName,
+                Map<String, dynamic>.from(row),
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
+            }
+          }
+        } catch (_) {
+          // Table might not exist or schema difference
+        }
+      }
+    });
+    return true;
+  }
 }

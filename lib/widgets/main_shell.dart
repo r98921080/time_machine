@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../screens/home/home_screen.dart';
+import '../screens/character/character_screen.dart';
 import '../screens/record/record_screen.dart';
 import '../screens/goals/goals_screen.dart';
 import '../screens/assistant/assistant_screen.dart';
@@ -16,6 +17,7 @@ class _MainShellState extends State<MainShell> {
 
   static const _screens = [
     HomeScreen(),
+    CharacterScreen(),
     RecordScreen(),
     GoalsScreen(),
     AssistantScreen(),
@@ -33,6 +35,11 @@ class _MainShellState extends State<MainShell> {
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
             label: '首頁',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.face_retouching_natural_outlined),
+            selectedIcon: Icon(Icons.face_retouching_natural),
+            label: '伴侶',
           ),
           NavigationDestination(
             icon: Icon(Icons.edit_note_outlined),

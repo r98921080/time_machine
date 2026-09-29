@@ -7,8 +7,12 @@ import '../../models/user_profile.dart';
 import '../knowledge/knowledge_screen.dart';
 import '../diary/diary_screen.dart';
 import '../vlog/vlog_screen.dart';
+import '../character/character_screen.dart';
+import '../achievements/achievements_screen.dart';
+import '../settings/settings_screen.dart';
 import 'stats_widgets.dart';
 import '../../widgets/activity_ring.dart';
+import '../../widgets/doll_character.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -236,15 +240,27 @@ class _HomeScreenState extends State<HomeScreen>
               if (provider.achievements.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
-                  child: Chip(
+                  child: ActionChip(
                     avatar: const Icon(Icons.emoji_events, size: 14),
                     label: Text('${provider.achievements.length}',
                         style: const TextStyle(fontSize: 11)),
                     backgroundColor: theme.colorScheme.tertiaryContainer,
                     padding: EdgeInsets.zero,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AchievementsScreen()),
+                    ),
                   ),
                 ),
+              IconButton(
+                icon: const Icon(Icons.settings_outlined),
+                tooltip: '設定',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                ),
+              ),
             ],
             bottom: TabBar(
               controller: _tab,
@@ -290,6 +306,10 @@ class _HomeTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
       children: [
+        // ── Companion Hero Card ─────────────────────────────────
+        _CompanionHeroCard(provider: provider, theme: theme),
+        const SizedBox(height: 12),
+
         // ── Activity Ring Hero ──────────────────────────────────
         Card(
           child: Padding(
@@ -401,6 +421,200 @@ class _HomeTab extends StatelessWidget {
         // ── Today diary summary ─────────────────────────────────
         _TodaySummaryCard(provider: provider, theme: theme),
       ],
+    );
+  }
+}
+
+class _CompanionHeroCard extends StatefulWidget {
+  final AppProvider provider;
+  final ThemeData theme;
+  const _CompanionHeroCard({required this.provider, required this.theme});
+
+  @override
+  State<_CompanionHeroCard> createState() => _CompanionHeroCardState();
+}
+
+class _CompanionHeroCardState extends State<_CompanionHeroCard> {
+  String? _dialogBubble;
+
+  @override
+  void initState() {
+    super.initState();
+    _dialogBubble = widget.provider.proactiveMessage ?? '今天也一起朝著目標前進吧！';
+  }
+
+  Future<void> _onTapCompanion() async {
+    final quote = await widget.provider.interactWithCharacter();
+    if (mounted) {
+      setState(() {
+        _dialogBubble = quote;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = widget.provider;
+    final profile = provider.profile;
+    final character = provider.character;
+    if (profile == null || character == null) return const SizedBox.shrink();
+
+    final theme = widget.theme;
+    final isMirror = profile.characterMode == CharacterMode.mirror;
+    final exp = profile.characterExp;
+    final expInLevel = exp % 100;
+    final level = (exp ~/ 100) + 1;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: theme.colorScheme.primary.withOpacity(0.15),
+          width: 1,
+        ),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              theme.colorScheme.primaryContainer.withOpacity(0.40),
+              theme.colorScheme.surface,
+            ],
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            DollCharacterWidget(
+              appearance: character,
+              gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
+              isMirror: isMirror,
+              width: 90,
+              height: 140,
+              enableAnimation: true,
+              interactive: true,
+              onTap: _onTapCompanion,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        provider.characterName,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          'Lv.$level ${provider.relationship}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface.withOpacity(0.92),
+                      borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(12),
+                        bottomLeft: Radius.circular(12),
+                        bottomRight: Radius.circular(12),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.04),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      _dialogBubble ?? '點擊我可以互動喔！',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        height: 1.35,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: expInLevel / 100.0,
+                            minHeight: 5,
+                            backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '$expInLevel/100 EXP',
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: InkWell(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const CharacterScreen()),
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.checkroom, size: 14, color: theme.colorScheme.primary),
+                            const SizedBox(width: 4),
+                            Text(
+                              '衣櫥與養成',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                            Icon(Icons.chevron_right, size: 14, color: theme.colorScheme.primary),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -2,12 +2,15 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/character.dart';
 
-class DollCharacterWidget extends StatelessWidget {
+class DollCharacterWidget extends StatefulWidget {
   final CharacterAppearance appearance;
   final String gender;
   final bool isMirror;
   final double width;
   final double height;
+  final bool enableAnimation;
+  final bool interactive;
+  final VoidCallback? onTap;
 
   const DollCharacterWidget({
     super.key,
@@ -16,23 +19,232 @@ class DollCharacterWidget extends StatelessWidget {
     this.isMirror = false,
     this.width = 180,
     this.height = 320,
+    this.enableAnimation = true,
+    this.interactive = true,
+    this.onTap,
   });
 
   @override
+  State<DollCharacterWidget> createState() => _DollCharacterWidgetState();
+}
+
+class _DollCharacterWidgetState extends State<DollCharacterWidget>
+    with TickerProviderStateMixin {
+  late AnimationController _breatheCtrl;
+  late AnimationController _blinkCtrl;
+  late AnimationController _tapCtrl;
+  final math.Random _rnd = math.Random();
+  final List<_FloatingHeart> _hearts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _breatheCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3200),
+    )..repeat(reverse: true);
+
+    _blinkCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+    );
+
+    _tapCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+
+    if (widget.enableAnimation) {
+      _scheduleNextBlink();
+    }
+  }
+
+  void _scheduleNextBlink() {
+    if (!mounted || !widget.enableAnimation) return;
+    final delay = 2500 + _rnd.nextInt(3500);
+    Future.delayed(Duration(milliseconds: delay), () {
+      if (!mounted) return;
+      _blinkCtrl.forward(from: 0.0).then((_) {
+        if (!mounted) return;
+        _blinkCtrl.reverse().then((_) => _scheduleNextBlink());
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _breatheCtrl.dispose();
+    _blinkCtrl.dispose();
+    _tapCtrl.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    if (!widget.interactive) return;
+    _tapCtrl.forward(from: 0.0);
+
+    final id = DateTime.now().millisecondsSinceEpoch;
+    setState(() {
+      _hearts.add(_FloatingHeart(
+        id: id,
+        x: (widget.width / 2) + (_rnd.nextDouble() * 40 - 20),
+        y: widget.height * 0.35,
+        emoji: ['❤️', '✨', '💖', '⭐', '🌸'][_rnd.nextInt(5)],
+      ));
+    });
+
+    Future.delayed(const Duration(milliseconds: 900), () {
+      if (mounted) {
+        setState(() {
+          _hearts.removeWhere((h) => h.id == id);
+        });
+      }
+    });
+
+    widget.onTap?.call();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      child: SizedBox(
-        width: width,
-        height: height,
-        child: CustomPaint(
-          painter: _DollPainter(
-            appearance: appearance,
-            isFemale: gender == '她' || gender == '女',
-            isMirror: isMirror,
+    if (!widget.enableAnimation) {
+      return RepaintBoundary(
+        child: SizedBox(
+          width: widget.width,
+          height: widget.height,
+          child: CustomPaint(
+            painter: _DollPainter(
+              appearance: widget.appearance,
+              isFemale: widget.gender == '她' || widget.gender == '女',
+              isMirror: widget.isMirror,
+              blinkProgress: 0.0,
+            ),
+            isComplex: true,
           ),
-          isComplex: true,
         ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: _handleTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_breatheCtrl, _blinkCtrl, _tapCtrl]),
+        builder: (context, _) {
+          final breatheVal = math.sin(_breatheCtrl.value * math.pi);
+          final dy = breatheVal * 2.5;
+          final scaleBreathe = 1.0 + (breatheVal * 0.012);
+
+          final tapProgress = _tapCtrl.value;
+          final tapScale = tapProgress == 0
+              ? 1.0
+              : 1.0 + math.sin(tapProgress * math.pi) * 0.08;
+
+          final totalScale = scaleBreathe * tapScale;
+
+          return SizedBox(
+            width: widget.width,
+            height: widget.height,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Transform.translate(
+                  offset: Offset(0, dy),
+                  child: Transform.scale(
+                    scale: totalScale,
+                    alignment: Alignment.bottomCenter,
+                    child: RepaintBoundary(
+                      child: SizedBox(
+                        width: widget.width,
+                        height: widget.height,
+                        child: CustomPaint(
+                          painter: _DollPainter(
+                            appearance: widget.appearance,
+                            isFemale: widget.gender == '她' || widget.gender == '女',
+                            isMirror: widget.isMirror,
+                            blinkProgress: _blinkCtrl.value,
+                          ),
+                          isComplex: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                for (final heart in _hearts)
+                  _AnimatedHeartParticle(
+                    heart: heart,
+                    height: widget.height,
+                  ),
+              ],
+            ),
+          );
+        },
       ),
+    );
+  }
+}
+
+class _FloatingHeart {
+  final int id;
+  final double x;
+  final double y;
+  final String emoji;
+  _FloatingHeart({required this.id, required this.x, required this.y, required this.emoji});
+}
+
+class _AnimatedHeartParticle extends StatefulWidget {
+  final _FloatingHeart heart;
+  final double height;
+  const _AnimatedHeartParticle({required this.heart, required this.height});
+
+  @override
+  State<_AnimatedHeartParticle> createState() => _AnimatedHeartParticleState();
+}
+
+class _AnimatedHeartParticleState extends State<_AnimatedHeartParticle>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final progress = _ctrl.value;
+        final floatY = widget.heart.y - (progress * 70);
+        final opacity = (1.0 - progress).clamp(0.0, 1.0);
+        final scale = 0.6 + (math.sin(progress * math.pi) * 0.7);
+
+        return Positioned(
+          left: widget.heart.x - 12,
+          top: floatY,
+          child: Opacity(
+            opacity: opacity,
+            child: Transform.scale(
+              scale: scale,
+              child: Text(
+                widget.heart.emoji,
+                style: const TextStyle(fontSize: 22),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -42,11 +254,13 @@ class _DollPainter extends CustomPainter {
   final CharacterAppearance appearance;
   final bool isFemale;
   final bool isMirror;
+  final double blinkProgress;
 
   const _DollPainter({
     required this.appearance,
     required this.isFemale,
     this.isMirror = false,
+    this.blinkProgress = 0.0,
   });
 
   // ── palette ───────────────────────────────────────────────────────────────
@@ -1131,9 +1345,26 @@ class _DollPainter extends CustomPainter {
   }
 
   void _paintEye(Canvas canvas, Offset center, double sw, double lw, bool isRight) {
+    if (blinkProgress >= 0.7) {
+      final ew = sw * 0.100;
+      final eh = sw * 0.088;
+      final arc = Path()
+        ..moveTo(center.dx - ew * 0.48, center.dy)
+        ..quadraticBezierTo(center.dx, center.dy - eh * 0.55, center.dx + ew * 0.48, center.dy);
+      canvas.drawPath(
+        arc,
+        Paint()
+          ..color = _outline
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = lw * 1.15
+          ..strokeCap = StrokeCap.round,
+      );
+      return;
+    }
+
     final accent = isMirror ? const Color(0xFFDB2777) : const Color(0xFF4F46E5);
     final ew = sw * 0.100;
-    final eh = sw * 0.088;
+    final eh = sw * 0.088 * (1.0 - blinkProgress * 0.85);
 
     // Upper eyelid shadow area
     canvas.drawOval(
@@ -1351,5 +1582,6 @@ class _DollPainter extends CustomPainter {
   bool shouldRepaint(_DollPainter old) =>
       old.appearance != appearance ||
       old.isFemale != isFemale ||
-      old.isMirror != isMirror;
+      old.isMirror != isMirror ||
+      old.blinkProgress != blinkProgress;
 }

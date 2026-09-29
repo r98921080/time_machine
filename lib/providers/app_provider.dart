@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,17 +24,9 @@ const _kKnowledgeDateKey = 'knowledge_cache_date';
 const _kMemorySummaryPrefix = 'chat_memory_summary_';
 const _kBonusChallengeDateKey = 'bonus_challenge_date';
 
-// ignore: unnecessary_string_interpolations
-const _kDefaultGeminiKey = 'AQ.Ab8RN6IzqH6pR'
-    'Rv1Cvc1Ph_d-_gnOA6r5X1Ed6pot0CwrILR6g';
-const _kFallbackGeminiKeys = [
-  // ignore: unnecessary_string_interpolations
-  'AQ.Ab8RN6JPgUQnpg_Uymk3iFDVBmreq_wvl73WoFUVS0Jw'
-      'QBhMyw',
-  // ignore: unnecessary_string_interpolations
-  'AQ.Ab8RN6JZ3yd3s4UTcTmzWd6MVU4URsdJ6RBYrsVQf05d'
-      'a_bkmA',
-];
+const _kDefaultGeminiKey =
+    String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
+const _kFallbackGeminiKeys = <String>[];
 const _kDefaultOpenAIKey =
     String.fromEnvironment('OPENAI_API_KEY', defaultValue: '');
 
@@ -272,16 +265,85 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> saveApiKey(String key) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kApiKey, key);
-    _apiKey = key;
+    await prefs.setString(_kApiKey, key.trim());
+    _apiKey = key.trim().isEmpty ? null : key.trim();
     notifyListeners();
   }
 
   Future<void> saveOpenAIKey(String key) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kOpenAIKey, key);
-    _openAIKey = key;
+    await prefs.setString(_kOpenAIKey, key.trim());
+    _openAIKey = key.trim().isEmpty ? null : key.trim();
     notifyListeners();
+  }
+
+  // ── Backup & Restore ──────────────────────────────────────────
+
+  Future<String> exportBackupJson() async {
+    final data = await DatabaseService.exportAllData();
+    return jsonEncode(data);
+  }
+
+  Future<bool> importBackupJson(String jsonStr) async {
+    try {
+      final decoded = jsonDecode(jsonStr);
+      if (decoded is! Map<String, dynamic>) return false;
+      final ok = await DatabaseService.importAllData(decoded);
+      if (ok) {
+        await init();
+      }
+      return ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ── Character Daily Interactions ──────────────────────────────
+
+  int _dailyTaps = 0;
+  DateTime? _lastTapDate;
+
+  Future<String> interactWithCharacter() async {
+    final now = DateTime.now();
+    if (_lastTapDate == null || !_isSameDay(_lastTapDate!, now)) {
+      _dailyTaps = 0;
+      _lastTapDate = now;
+    }
+
+    final hour = now.hour;
+    final points = todayGoalPoints;
+    final mealsCount = todayMeals.length;
+    final water = waterMl;
+
+    if (_dailyTaps < 5) {
+      _dailyTaps++;
+      await _addCharacterExp(1);
+    }
+
+    String dialog;
+    if (hour >= 23 || hour < 5) {
+      dialog = '夜深了，還沒睡嗎？早點休息才能走得更遠喔。';
+    } else if (points >= 10) {
+      dialog = '太厲害了！今天的目標達成度超高，我為你感到驕傲！';
+    } else if (water < 1000 && hour >= 14) {
+      dialog = '下午了，記得多喝一口水補充水分喔～';
+    } else if (mealsCount == 0 && hour >= 12) {
+      dialog = '中午吃過飯了嗎？記得好好照顧自己的肚子喔！';
+    } else if (_dailyTaps == 1) {
+      dialog = '嗨！今天也一起加油吧，有我在陪著你！';
+    } else {
+      final quotes = [
+        '摸摸頭～今天也感受到了你的滿滿心意！',
+        '每一次記錄，都是時間留下的珍貴足跡。',
+        '你今天看起來精神不錯呢！',
+        '不管遇到什麼挑戰，我們一步一步慢慢來～',
+        '今天的努力，未來的你一定會深深感謝！',
+      ];
+      dialog = quotes[math.Random().nextInt(quotes.length)];
+    }
+
+    notifyListeners();
+    return dialog;
   }
 
   // ── Character Name ────────────────────────────────────────────
