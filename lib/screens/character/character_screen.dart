@@ -223,7 +223,7 @@ class _CharacterScreenState extends State<CharacterScreen>
           // ── Character image area ──────────────────────────────────
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            height: _chatExpanded ? 175 : 310,
+            height: _chatExpanded ? 190 : 360,
             decoration: BoxDecoration(
               gradient: RadialGradient(
                 center: const Alignment(0, -0.2),
@@ -246,8 +246,8 @@ class _CharacterScreenState extends State<CharacterScreen>
                 Padding(
                   padding: const EdgeInsets.only(top: 8, bottom: 8),
                   child: OrnateFrameBox(
-                    width: _chatExpanded ? 130 : 225,
-                    height: _chatExpanded ? 165 : 290,
+                    width: _chatExpanded ? 140 : 235,
+                    height: _chatExpanded ? 180 : 340,
                     padding: const EdgeInsets.all(6),
                     showBadge: !_chatExpanded,
                     badgeText: isMirror ? (profile.mirrorGender ?? '映照伴侶') : charName,
@@ -279,8 +279,8 @@ class _CharacterScreenState extends State<CharacterScreen>
                             appearance: character,
                             gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
                             isMirror: isMirror,
-                            width: _chatExpanded ? 105 : 185,
-                            height: _chatExpanded ? 155 : 275,
+                            width: _chatExpanded ? 120 : 210,
+                            height: _chatExpanded ? 170 : 325,
                             enableAnimation: true,
                             interactive: true,
                             onTap: () async {
@@ -746,30 +746,35 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
           const SizedBox(height: 16),
           Text('自訂外觀與配件', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          _SectionLabel('自訂服飾', theme),
+          _SectionLabel('自訂全身服飾', theme),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               _buildSimpleOption(
-                label: '歐式宮廷荷葉服',
-                selected: _appearance.outfitId == null || _appearance.outfitId == 'outfit_victorian',
+                label: '歐式宮廷禮服',
+                selected: _appearance.outfitId == null || _appearance.outfitId == 'outfit_victorian' || _appearance.outfitId == 'outfit_scholar',
                 onTap: () => setState(() => _appearance = _appearance.copyWith(outfitId: 'outfit_victorian')),
               ),
               _buildSimpleOption(
-                label: '天藍公主禮服',
-                selected: _appearance.outfitId == 'outfit_sundress',
+                label: '天藍宮廷裙裝',
+                selected: _appearance.outfitId == 'outfit_sundress' || _appearance.outfitId == 'outfit_princess',
                 onTap: () => setState(() => _appearance = _appearance.copyWith(outfitId: 'outfit_sundress')),
               ),
               _buildSimpleOption(
-                label: '紳士西裝外套',
+                label: '俐落學院正裝',
                 selected: _appearance.outfitId == 'outfit_formal_suit',
                 onTap: () => setState(() => _appearance = _appearance.copyWith(outfitId: 'outfit_formal_suit')),
+              ),
+              _buildSimpleOption(
+                label: '街頭連帽夾克',
+                selected: _appearance.outfitId == 'outfit_casual_hoodie',
+                onTap: () => setState(() => _appearance = _appearance.copyWith(outfitId: 'outfit_casual_hoodie')),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          _SectionLabel('特色飾品配件', theme),
+          _SectionLabel('特色飾品與配件', theme),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -809,6 +814,45 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
                     list.remove('acc_ribbon_blue');
                   } else {
                     list.add('acc_ribbon_blue');
+                  }
+                  setState(() => _appearance = _appearance.copyWith(accessories: list));
+                },
+              ),
+              _buildSimpleOption(
+                label: '閃亮星芒耳環',
+                selected: _appearance.accessories.contains('acc_earring_star'),
+                onTap: () {
+                  final list = List<String>.from(_appearance.accessories);
+                  if (list.contains('acc_earring_star')) {
+                    list.remove('acc_earring_star');
+                  } else {
+                    list.add('acc_earring_star');
+                  }
+                  setState(() => _appearance = _appearance.copyWith(accessories: list));
+                },
+              ),
+              _buildSimpleOption(
+                label: '純白天使羽翼',
+                selected: _appearance.accessories.contains('acc_wings_angel'),
+                onTap: () {
+                  final list = List<String>.from(_appearance.accessories);
+                  if (list.contains('acc_wings_angel')) {
+                    list.remove('acc_wings_angel');
+                  } else {
+                    list.add('acc_wings_angel');
+                  }
+                  setState(() => _appearance = _appearance.copyWith(accessories: list));
+                },
+              ),
+              _buildSimpleOption(
+                label: '可愛貓咪鬍鬚',
+                selected: _appearance.accessories.contains('face_cat_whiskers'),
+                onTap: () {
+                  final list = List<String>.from(_appearance.accessories);
+                  if (list.contains('face_cat_whiskers')) {
+                    list.remove('face_cat_whiskers');
+                  } else {
+                    list.add('face_cat_whiskers');
                   }
                   setState(() => _appearance = _appearance.copyWith(accessories: list));
                 },

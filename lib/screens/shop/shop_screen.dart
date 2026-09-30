@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../models/shop_item.dart';
 import '../../models/character.dart';
 import '../../providers/app_provider.dart';
+import '../../widgets/doll_character.dart';
+import '../../widgets/art_frame_widgets.dart';
 
 // ── Catalog (120+ items) ───────────────────────────────────────────────────
 final _catalog = <ShopItem>[
@@ -331,47 +333,142 @@ class _ShopScreenState extends State<ShopScreen>
           tabs: _tabs.map((c) => Tab(text: c.label)).toList(),
         ),
       ),
-      body: TabBarView(
-        controller: _tabCtrl,
-        children: _tabs.map((cat) {
-          final items = _catalog.where((i) => i.category == cat).toList();
-          if (items.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+      body: Column(
+        children: [
+          // ── 專屬試衣間舞台（全身立繪即時換裝預覽） ──
+          if (character != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFFC99742).withOpacity(0.14),
+                    theme.colorScheme.surface,
+                  ],
+                ),
+              ),
+              child: Row(
                 children: [
-                  const Text('🔜', style: TextStyle(fontSize: 48)),
-                  const SizedBox(height: 12),
-                  Text('更多 ${cat.label} 即將上架',
-                      style: theme.textTheme.titleMedium),
+                  OrnateFrameBox(
+                    width: 105,
+                    height: 155,
+                    padding: const EdgeInsets.all(4),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          decoration: const BoxDecoration(
+                            gradient: RadialGradient(
+                              center: Alignment(0, -0.15),
+                              radius: 0.95,
+                              colors: [Color(0xFF263D45), Color(0xFF101B20)],
+                            ),
+                          ),
+                        ),
+                        DollCharacterWidget(
+                          appearance: character,
+                          gender: provider.profile?.sex ?? '她',
+                          isMirror: provider.profile?.characterMode == CharacterMode.mirror,
+                          width: 95,
+                          height: 145,
+                          enableAnimation: true,
+                          interactive: false,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              '✨ 全身試衣鏡',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFFC99742)),
+                            ),
+                            const Spacer(),
+                            OrnatePlaqueBadge(
+                              label: '已裝備: ${character.accessories.length + (character.outfitId != null ? 1 : 0)} 件',
+                              fontSize: 10,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '點擊商城中的服飾、配件或飾品，將即時在全身立繪上試穿與裝備！',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: theme.colorScheme.onSurfaceVariant,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '當前套裝：${character.outfitId == null ? "經典學者" : character.outfitId == "outfit_sundress" ? "天藍宮廷" : character.outfitId == "outfit_formal_suit" ? "學院正裝" : "休閒夾克"}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFC99742),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
-            );
-          }
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.72,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
             ),
-            itemCount: items.length,
-            itemBuilder: (_, i) {
-              final item = items[i];
-              final isOwned = owned.contains(item.id);
-              final isEquipped = _isEquipped(character, item);
-              return _ShopCard(
-                item: item,
-                owned: isOwned,
-                equipped: isEquipped,
-                canAfford: points >= item.price || item.price == 0,
-                theme: theme,
-                onTap: () => _handleTap(context, provider, item, isOwned, isEquipped),
-              );
-            },
-          );
-        }).toList(),
+          const Divider(height: 1),
+          // ── 商品分頁列表 ──
+          Expanded(
+            child: TabBarView(
+              controller: _tabCtrl,
+              children: _tabs.map((cat) {
+                final items = _catalog.where((i) => i.category == cat).toList();
+                if (items.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('🔜', style: TextStyle(fontSize: 48)),
+                        const SizedBox(height: 12),
+                        Text('更多 ${cat.label} 即將上架',
+                            style: theme.textTheme.titleMedium),
+                      ],
+                    ),
+                  );
+                }
+                return GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: 0.72,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) {
+                    final item = items[i];
+                    final isOwned = owned.contains(item.id);
+                    final isEquipped = _isEquipped(character, item);
+                    return _ShopCard(
+                      item: item,
+                      owned: isOwned,
+                      equipped: isEquipped,
+                      canAfford: points >= item.price || item.price == 0,
+                      theme: theme,
+                      onTap: () => _handleTap(context, provider, item, isOwned, isEquipped),
+                    );
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
     );
   }

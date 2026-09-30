@@ -491,8 +491,8 @@ class _CompanionHeroCardState extends State<_CompanionHeroCard> {
         child: Row(
           children: [
             OrnateFrameBox(
-              width: 95,
-              height: 140,
+              width: 105,
+              height: 155,
               padding: const EdgeInsets.all(4),
               child: Stack(
                 alignment: Alignment.center,
@@ -500,9 +500,9 @@ class _CompanionHeroCardState extends State<_CompanionHeroCard> {
                   Container(
                     decoration: const BoxDecoration(
                       gradient: RadialGradient(
-                        center: Alignment(0, -0.1),
-                        radius: 0.9,
-                        colors: [Color(0xFFF3E2B8), Color(0xFFD4A864), Color(0xFF8B6432)],
+                        center: Alignment(0, -0.15),
+                        radius: 0.95,
+                        colors: [Color(0xFF263D45), Color(0xFF101B20)],
                       ),
                     ),
                   ),
@@ -510,8 +510,8 @@ class _CompanionHeroCardState extends State<_CompanionHeroCard> {
                     appearance: character,
                     gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
                     isMirror: isMirror,
-                    width: 85,
-                    height: 130,
+                    width: 95,
+                    height: 145,
                     enableAnimation: true,
                     interactive: true,
                     onTap: _onTapCompanion,
