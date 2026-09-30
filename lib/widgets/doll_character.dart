@@ -104,6 +104,61 @@ class _DollCharacterWidgetState extends State<DollCharacterWidget>
     widget.onTap?.call();
   }
 
+  Widget _buildCharacterVisual(double dy, double totalScale) {
+    // Default to high-res anime companion illustration matching reference style
+    final assetPath = widget.appearance.portraitAsset ??
+        (widget.isMirror
+            ? 'assets/characters/companion_portrait_1.jpg'
+            : 'assets/characters/companion_portrait_2.jpg');
+
+    return Transform.translate(
+      offset: Offset(0, dy),
+      child: Transform.scale(
+        scale: totalScale,
+        alignment: Alignment.center,
+        child: SizedBox(
+          width: widget.width,
+          height: widget.height,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  assetPath,
+                  fit: BoxFit.cover,
+                  alignment: const Alignment(0, -0.2),
+                  errorBuilder: (_, __, ___) => CustomPaint(
+                    painter: _DollPainter(
+                      appearance: widget.appearance,
+                      isFemale: widget.gender == '她' || widget.gender == '女',
+                      isMirror: widget.isMirror,
+                      blinkProgress: _blinkCtrl.value,
+                    ),
+                    isComplex: true,
+                  ),
+                ),
+                // Subtle ambient vignette shadow around border
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: Alignment.center,
+                      radius: 1.15,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.28),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!widget.enableAnimation) {
@@ -111,15 +166,7 @@ class _DollCharacterWidgetState extends State<DollCharacterWidget>
         child: SizedBox(
           width: widget.width,
           height: widget.height,
-          child: CustomPaint(
-            painter: _DollPainter(
-              appearance: widget.appearance,
-              isFemale: widget.gender == '她' || widget.gender == '女',
-              isMirror: widget.isMirror,
-              blinkProgress: 0.0,
-            ),
-            isComplex: true,
-          ),
+          child: _buildCharacterVisual(0, 1.0),
         ),
       );
     }
@@ -131,7 +178,7 @@ class _DollCharacterWidgetState extends State<DollCharacterWidget>
         animation: Listenable.merge([_breatheCtrl, _blinkCtrl, _tapCtrl]),
         builder: (context, _) {
           final breatheVal = math.sin(_breatheCtrl.value * math.pi);
-          final dy = breatheVal * 2.5;
+          final dy = breatheVal * 2.2;
           final scaleBreathe = 1.0 + (breatheVal * 0.012);
 
           final tapProgress = _tapCtrl.value;
@@ -148,28 +195,7 @@ class _DollCharacterWidgetState extends State<DollCharacterWidget>
               clipBehavior: Clip.none,
               alignment: Alignment.center,
               children: [
-                Transform.translate(
-                  offset: Offset(0, dy),
-                  child: Transform.scale(
-                    scale: totalScale,
-                    alignment: Alignment.bottomCenter,
-                    child: RepaintBoundary(
-                      child: SizedBox(
-                        width: widget.width,
-                        height: widget.height,
-                        child: CustomPaint(
-                          painter: _DollPainter(
-                            appearance: widget.appearance,
-                            isFemale: widget.gender == '她' || widget.gender == '女',
-                            isMirror: widget.isMirror,
-                            blinkProgress: _blinkCtrl.value,
-                          ),
-                          isComplex: true,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+                _buildCharacterVisual(dy, totalScale),
                 for (final heart in _hearts)
                   _AnimatedHeartParticle(
                     heart: heart,

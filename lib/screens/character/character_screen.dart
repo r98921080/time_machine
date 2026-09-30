@@ -746,6 +746,24 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
           const SizedBox(height: 16),
           Text('自訂外觀', style: theme.textTheme.titleMedium),
           const SizedBox(height: 16),
+          _SectionLabel('立繪風格', theme),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildPortraitOption(
+                label: '經典典雅（評論家）',
+                asset: 'assets/characters/companion_portrait_2.jpg',
+                selected: _appearance.portraitAsset == 'assets/characters/companion_portrait_2.jpg' || _appearance.portraitAsset == null,
+              ),
+              _buildPortraitOption(
+                label: '華麗皇冠（公主）',
+                asset: 'assets/characters/companion_portrait_1.jpg',
+                selected: _appearance.portraitAsset == 'assets/characters/companion_portrait_1.jpg',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           _SectionLabel('膚色', theme),
           _EnumRow<SkinTone>(
             values: SkinTone.values,
@@ -781,6 +799,47 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
             child: const Text('儲存'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPortraitOption({
+    required String label,
+    required String asset,
+    required bool selected,
+  }) {
+    return GestureDetector(
+      onTap: () => setState(() => _appearance = _appearance.copyWith(portraitAsset: asset)),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFFC99742).withOpacity(0.18)
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(16),
+          border: selected
+              ? Border.all(color: const Color(0xFFC99742), width: 2)
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(asset, width: 28, height: 28, fit: BoxFit.cover),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                color: selected ? const Color(0xFFC99742) : null,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

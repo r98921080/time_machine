@@ -17,6 +17,7 @@ class CharacterAppearance {
   double muscleLevel;  // 0.0–1.0, reflects actual progress
   double fatLevel;     // 0.0–1.0, reflects actual progress
   String? gender;
+  String? portraitAsset; // High-res anime illustration asset path
 
   CharacterAppearance({
     this.skinTone = SkinTone.medium,
@@ -31,6 +32,7 @@ class CharacterAppearance {
     this.muscleLevel = 0.0,
     this.fatLevel = 0.3,
     this.gender,
+    this.portraitAsset,
   }) : accessories = accessories ?? [],
        tattoos = tattoos ?? [];
 
@@ -47,6 +49,7 @@ class CharacterAppearance {
     'muscleLevel': muscleLevel,
     'fatLevel': fatLevel,
     'gender': gender,
+    'portraitAsset': portraitAsset,
   };
 
   factory CharacterAppearance.fromMap(Map<String, dynamic> m) => CharacterAppearance(
@@ -67,6 +70,7 @@ class CharacterAppearance {
     muscleLevel: (m['muscleLevel'] as num?)?.toDouble() ?? 0.0,
     fatLevel: (m['fatLevel'] as num?)?.toDouble() ?? 0.3,
     gender: m['gender'] as String?,
+    portraitAsset: m['portraitAsset'] as String?,
   );
 
   CharacterAppearance copyWith({
@@ -82,6 +86,7 @@ class CharacterAppearance {
     double? muscleLevel,
     double? fatLevel,
     String? gender,
+    String? portraitAsset,
   }) => CharacterAppearance(
     skinTone: skinTone ?? this.skinTone,
     hairStyle: hairStyle ?? this.hairStyle,
@@ -95,5 +100,6 @@ class CharacterAppearance {
     muscleLevel: muscleLevel ?? this.muscleLevel,
     fatLevel: fatLevel ?? this.fatLevel,
     gender: gender ?? this.gender,
+    portraitAsset: portraitAsset ?? this.portraitAsset,
   );
 }
