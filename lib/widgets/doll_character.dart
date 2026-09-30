@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/character.dart';
+import 'anime_bust_painter.dart';
 
 class DollCharacterWidget extends StatefulWidget {
   final CharacterAppearance appearance;
@@ -105,53 +106,23 @@ class _DollCharacterWidgetState extends State<DollCharacterWidget>
   }
 
   Widget _buildCharacterVisual(double dy, double totalScale) {
-    // Default to high-res anime companion illustration matching reference style
-    final assetPath = widget.appearance.portraitAsset ??
-        (widget.isMirror
-            ? 'assets/characters/companion_portrait_1.jpg'
-            : 'assets/characters/companion_portrait_2.jpg');
-
     return Transform.translate(
       offset: Offset(0, dy),
       child: Transform.scale(
         scale: totalScale,
-        alignment: Alignment.center,
+        alignment: Alignment.bottomCenter,
         child: SizedBox(
           width: widget.width,
           height: widget.height,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.asset(
-                  assetPath,
-                  fit: BoxFit.cover,
-                  alignment: const Alignment(0, -0.2),
-                  errorBuilder: (_, __, ___) => CustomPaint(
-                    painter: _DollPainter(
-                      appearance: widget.appearance,
-                      isFemale: widget.gender == '她' || widget.gender == '女',
-                      isMirror: widget.isMirror,
-                      blinkProgress: _blinkCtrl.value,
-                    ),
-                    isComplex: true,
-                  ),
-                ),
-                // Subtle ambient vignette shadow around border
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      center: Alignment.center,
-                      radius: 1.15,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.28),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+          child: RepaintBoundary(
+            child: CustomPaint(
+              painter: AnimeBustPainter(
+                appearance: widget.appearance,
+                isFemale: widget.gender == '她' || widget.gender == '女',
+                isMirror: widget.isMirror,
+                blinkProgress: _blinkCtrl.value,
+              ),
+              isComplex: true,
             ),
           ),
         ),

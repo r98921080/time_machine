@@ -744,26 +744,78 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
                     borderRadius: BorderRadius.circular(2))),
           ),
           const SizedBox(height: 16),
-          Text('自訂外觀', style: theme.textTheme.titleMedium),
+          Text('自訂外觀與配件', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          _SectionLabel('立繪風格', theme),
+          _SectionLabel('自訂服飾', theme),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              _buildPortraitOption(
-                label: '經典典雅（評論家）',
-                asset: 'assets/characters/companion_portrait_2.jpg',
-                selected: _appearance.portraitAsset == 'assets/characters/companion_portrait_2.jpg' || _appearance.portraitAsset == null,
+              _buildSimpleOption(
+                label: '歐式宮廷荷葉服',
+                selected: _appearance.outfitId == null || _appearance.outfitId == 'outfit_victorian',
+                onTap: () => setState(() => _appearance = _appearance.copyWith(outfitId: 'outfit_victorian')),
               ),
-              _buildPortraitOption(
-                label: '華麗皇冠（公主）',
-                asset: 'assets/characters/companion_portrait_1.jpg',
-                selected: _appearance.portraitAsset == 'assets/characters/companion_portrait_1.jpg',
+              _buildSimpleOption(
+                label: '天藍公主禮服',
+                selected: _appearance.outfitId == 'outfit_sundress',
+                onTap: () => setState(() => _appearance = _appearance.copyWith(outfitId: 'outfit_sundress')),
+              ),
+              _buildSimpleOption(
+                label: '紳士西裝外套',
+                selected: _appearance.outfitId == 'outfit_formal_suit',
+                onTap: () => setState(() => _appearance = _appearance.copyWith(outfitId: 'outfit_formal_suit')),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+          _SectionLabel('特色飾品配件', theme),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildSimpleOption(
+                label: '金絲細框眼鏡',
+                selected: _appearance.accessories.contains('acc_glasses_round'),
+                onTap: () {
+                  final list = List<String>.from(_appearance.accessories);
+                  if (list.contains('acc_glasses_round')) {
+                    list.remove('acc_glasses_round');
+                  } else {
+                    list.add('acc_glasses_round');
+                  }
+                  setState(() => _appearance = _appearance.copyWith(accessories: list));
+                },
+              ),
+              _buildSimpleOption(
+                label: '璀璨黃金王冠',
+                selected: _appearance.accessories.contains('acc_crown_gold'),
+                onTap: () {
+                  final list = List<String>.from(_appearance.accessories);
+                  if (list.contains('acc_crown_gold')) {
+                    list.remove('acc_crown_gold');
+                  } else {
+                    list.add('acc_crown_gold');
+                  }
+                  setState(() => _appearance = _appearance.copyWith(accessories: list));
+                },
+              ),
+              _buildSimpleOption(
+                label: '皇家藍蝴蝶結',
+                selected: _appearance.accessories.contains('acc_ribbon_blue'),
+                onTap: () {
+                  final list = List<String>.from(_appearance.accessories);
+                  if (list.contains('acc_ribbon_blue')) {
+                    list.remove('acc_ribbon_blue');
+                  } else {
+                    list.add('acc_ribbon_blue');
+                  }
+                  setState(() => _appearance = _appearance.copyWith(accessories: list));
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
           _SectionLabel('膚色', theme),
           _EnumRow<SkinTone>(
             values: SkinTone.values,
@@ -803,42 +855,32 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
     );
   }
 
-  Widget _buildPortraitOption({
+  Widget _buildSimpleOption({
     required String label,
-    required String asset,
     required bool selected,
+    required VoidCallback onTap,
   }) {
     return GestureDetector(
-      onTap: () => setState(() => _appearance = _appearance.copyWith(portraitAsset: asset)),
+      onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: selected
               ? const Color(0xFFC99742).withOpacity(0.18)
               : Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           border: selected
               ? Border.all(color: const Color(0xFFC99742), width: 2)
               : null,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.asset(asset, width: 28, height: 28, fit: BoxFit.cover),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                color: selected ? const Color(0xFFC99742) : null,
-              ),
-            ),
-          ],
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            color: selected ? const Color(0xFFC99742) : null,
+          ),
         ),
       ),
     );
