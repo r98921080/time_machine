@@ -22,10 +22,10 @@ class TimeMachineApp extends StatelessWidget {
 
   ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
-    const seed = Color(0xFF6366F1); // Indigo
-    final scaffoldBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final borderColor = isDark ? const Color(0xFF334155).withOpacity(0.6) : const Color(0xFFE2E8F0);
+    const seed = Color(0xFFC99742); // Amber Gold
+    final scaffoldBg = isDark ? const Color(0xFF0F1E24) : const Color(0xFFF7F5F0); // Deep Teal night / Ivory day
+    final cardBg = isDark ? const Color(0xFF16252C) : const Color(0xFFFFFFFF);
+    final borderColor = isDark ? const Color(0xFF8B6B3E).withOpacity(0.45) : const Color(0xFFE2D7C3);
 
     return ThemeData(
       useMaterial3: true,
@@ -34,8 +34,8 @@ class TimeMachineApp extends StatelessWidget {
       colorScheme: ColorScheme.fromSeed(
         seedColor: seed,
         brightness: brightness,
-        primary: const Color(0xFF6366F1),
-        secondary: const Color(0xFF8B5CF6),
+        primary: const Color(0xFFC99742), // Antique Amber Gold
+        secondary: const Color(0xFF2B4D58), // Deep Teal
         surface: cardBg,
       ),
       fontFamily: 'NotoSansTC',
@@ -46,16 +46,18 @@ class TimeMachineApp extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
         titleTextStyle: TextStyle(
-          color: isDark ? Colors.white : const Color(0xFF0F172A),
+          color: isDark ? const Color(0xFFF3EEE6) : const Color(0xFF2C241E),
           fontSize: 18,
           fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
         ),
       ),
       cardTheme: CardThemeData(
-        elevation: 0,
+        elevation: 1,
+        shadowColor: isDark ? Colors.black45 : const Color(0xFF8B6B3E).withOpacity(0.12),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: borderColor, width: 1),
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: borderColor, width: 1.2),
         ),
         color: cardBg,
         margin: EdgeInsets.zero,
@@ -63,12 +65,12 @@ class TimeMachineApp extends StatelessWidget {
       navigationBarTheme: NavigationBarThemeData(
         elevation: 0,
         backgroundColor: cardBg,
-        indicatorColor: const Color(0xFF6366F1).withOpacity(isDark ? 0.28 : 0.15),
+        indicatorColor: const Color(0xFFC99742).withOpacity(isDark ? 0.28 : 0.18),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: isDark ? const Color(0xFF0B132B) : const Color(0xFFF1F5F9),
+        fillColor: isDark ? const Color(0xFF0D181D) : const Color(0xFFF4F0E8),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: borderColor),
@@ -79,16 +81,18 @@ class TimeMachineApp extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
+          borderSide: const BorderSide(color: Color(0xFFC99742), width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           elevation: 0,
+          backgroundColor: const Color(0xFFC99742),
+          foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(48),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.5),
         ),
       ),
     );

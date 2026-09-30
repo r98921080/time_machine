@@ -278,12 +278,12 @@ class _DollPainter extends CustomPainter {
   Color _skinHi(Color s)    => _lighten(s, 0.09);
 
   Color get _hairBase => const {
-    HairColor.black:   Color(0xFF242436),
-    HairColor.brown:   Color(0xFF6B3A14),
-    HairColor.blonde:  Color(0xFFEAC844),
-    HairColor.red:     Color(0xFFB02020),
-    HairColor.gray:    Color(0xFF989898),
-    HairColor.fantasy: Color(0xFF7C3AED),
+    HairColor.black:   Color(0xFF26242B),
+    HairColor.brown:   Color(0xFF9E8575), // Milk-tea ash brown from reference 1 & 2
+    HairColor.blonde:  Color(0xFFDEC388), // Soft wheat champagne blonde
+    HairColor.red:     Color(0xFFA64A45), // Wine brick red
+    HairColor.gray:    Color(0xFFB5ACB1), // Smoky lavender ash gray from reference 2
+    HairColor.fantasy: Color(0xFF6B587B), // Deep fantasy mauve
   }[appearance.hairColor]!;
 
   Color get _outline => const Color(0xFF1A1A2E);
@@ -1449,7 +1449,10 @@ class _DollPainter extends CustomPainter {
       return;
     }
 
-    final accent = isMirror ? const Color(0xFFEC4899) : const Color(0xFF6366F1);
+    // Reference Art eye colors:
+    // Left reference: deep emerald jewel green (0xFF2E8B57, 0xFF4ADE80)
+    // Right reference: crystal gray-blue (0xFF537494, 0xFF7DD3FC)
+    final accent = isMirror ? const Color(0xFF4A8B71) : const Color(0xFF2E8540);
     final ew = sw * 0.102;
     final eh = sw * 0.090 * (1.0 - blinkProgress * 0.85);
 

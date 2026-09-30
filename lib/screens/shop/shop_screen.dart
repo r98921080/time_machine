@@ -521,16 +521,16 @@ class _ShopCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       elevation: equipped ? 4 : 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(
           color: equipped
-              ? theme.colorScheme.primary
+              ? const Color(0xFFC99742)
               : isSSR
-                  ? const Color(0xFFF59E0B).withOpacity(0.55)
+                  ? const Color(0xFFC99742).withOpacity(0.8)
                   : isSR
-                      ? const Color(0xFFA855F7).withOpacity(0.40)
-                      : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-          width: equipped ? 2.2 : (isSSR || isSR ? 1.5 : 1),
+                      ? const Color(0xFF2B4D58).withOpacity(0.7)
+                      : (isDark ? const Color(0xFF8B6B3E).withOpacity(0.3) : const Color(0xFFE2D7C3)),
+          width: equipped ? 2.0 : (isSSR || isSR ? 1.4 : 1),
         ),
       ),
       child: InkWell(
@@ -546,8 +546,8 @@ class _ShopCard extends StatelessWidget {
                     center: const Alignment(0, -0.2),
                     radius: 0.9,
                     colors: [
-                      rarityColor.withOpacity(isDark ? 0.22 : 0.14),
-                      isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                      rarityColor.withOpacity(isDark ? 0.20 : 0.12),
+                      isDark ? const Color(0xFF16252C) : const Color(0xFFF7F5F0),
                     ],
                   ),
                 ),
@@ -696,7 +696,7 @@ class _ShopCard extends StatelessWidget {
             // ── Info Area ──
             Container(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+              color: isDark ? const Color(0xFF16252C) : Colors.white,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

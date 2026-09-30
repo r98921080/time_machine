@@ -7,6 +7,7 @@ import '../../models/chat_message.dart';
 import '../../widgets/doll_character.dart';
 import '../shop/shop_screen.dart';
 import '../achievements/achievements_screen.dart';
+import '../../widgets/art_frame_widgets.dart';
 
 class CharacterScreen extends StatefulWidget {
   const CharacterScreen({super.key});
@@ -222,18 +223,18 @@ class _CharacterScreenState extends State<CharacterScreen>
           // ── Character image area ──────────────────────────────────
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            height: _chatExpanded ? 160 : 295,
+            height: _chatExpanded ? 175 : 310,
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: const Alignment(0, -0.3),
-                radius: 1.15,
+                center: const Alignment(0, -0.2),
+                radius: 1.1,
                 colors: isMirror
                     ? [
-                        theme.colorScheme.secondaryContainer.withOpacity(0.85),
+                        const Color(0xFF5A3E28).withOpacity(0.55),
                         theme.colorScheme.surface,
                       ]
                     : [
-                        theme.colorScheme.primaryContainer.withOpacity(0.85),
+                        const Color(0xFF3A2D1D).withOpacity(0.65),
                         theme.colorScheme.surface,
                       ],
               ),
@@ -241,69 +242,78 @@ class _CharacterScreenState extends State<CharacterScreen>
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Glowing circular pedestal
-                Positioned(
-                  bottom: _chatExpanded ? 14 : 22,
-                  child: Container(
-                    width: _chatExpanded ? 90 : 165,
-                    height: _chatExpanded ? 18 : 30,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: (isMirror ? const Color(0xFFF472B6) : const Color(0xFF818CF8)).withOpacity(0.35),
-                          blurRadius: 20,
-                          spreadRadius: 4,
+                // Ornate Frame Border Presentation around companion
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 8),
+                  child: OrnateFrameBox(
+                    width: _chatExpanded ? 130 : 225,
+                    height: _chatExpanded ? 165 : 290,
+                    padding: const EdgeInsets.all(6),
+                    showBadge: !_chatExpanded,
+                    badgeText: isMirror ? (profile.mirrorGender ?? '映照伴侶') : charName,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Warm autumn amber glow backdrop
+                        Container(
+                          decoration: const BoxDecoration(
+                            gradient: RadialGradient(
+                              center: Alignment(0, -0.15),
+                              radius: 0.95,
+                              colors: [
+                                Color(0xFFF3E2B8),
+                                Color(0xFFD4A864),
+                                Color(0xFF8B6432),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // Character with subtle breathing animation
+                        AnimatedBuilder(
+                          animation: _idleAnim,
+                          builder: (_, child) => Transform.translate(
+                            offset: Offset(0, _idleAnim.value),
+                            child: child,
+                          ),
+                          child: DollCharacterWidget(
+                            appearance: character,
+                            gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
+                            isMirror: isMirror,
+                            width: _chatExpanded ? 105 : 185,
+                            height: _chatExpanded ? 155 : 275,
+                            enableAnimation: true,
+                            interactive: true,
+                            onTap: () async {
+                              final quote = await provider.interactWithCharacter();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('$charName：$quote'),
+                                    duration: const Duration(seconds: 3),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
+                          ),
                         ),
                       ],
-                      gradient: RadialGradient(
-                        colors: [
-                          (isMirror ? const Color(0xFFF472B6) : const Color(0xFF818CF8)).withOpacity(0.40),
-                          Colors.transparent,
-                        ],
-                      ),
                     ),
                   ),
                 ),
-                AnimatedBuilder(
-                  animation: _idleAnim,
-                  builder: (_, child) => Transform.translate(
-                    offset: Offset(0, _idleAnim.value),
-                    child: child,
-                  ),
-                  child: DollCharacterWidget(
-                    appearance: character,
-                    gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
-                    isMirror: isMirror,
-                    width: _chatExpanded ? 100 : 195,
-                    height: _chatExpanded ? 160 : 295,
-                    enableAnimation: true,
-                    interactive: true,
-                    onTap: () async {
-                      final quote = await provider.interactWithCharacter();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('$charName：$quote'),
-                            duration: const Duration(seconds: 3),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                ),
                 Positioned(
-                  top: 12,
+                  top: 10,
                   right: 14,
                   child: FilledButton.tonalIcon(
                     style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       visualDensity: VisualDensity.compact,
+                      backgroundColor: const Color(0xFFC99742).withOpacity(0.18),
+                      foregroundColor: const Color(0xFFC99742),
                     ),
                     onPressed: () => _showCustomizeSheet(context, provider, character),
-                    icon: const Icon(Icons.checkroom, size: 16),
-                    label: const Text('自訂外觀', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    icon: const Icon(Icons.checkroom, size: 15),
+                    label: const Text('自訂外觀', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
                   ),
                 ),
                 Positioned(
@@ -314,8 +324,8 @@ class _CharacterScreenState extends State<CharacterScreen>
                     children: [
                       FloatingActionButton.small(
                         heroTag: 'toggle_chat',
-                        backgroundColor: theme.colorScheme.secondaryContainer,
-                        foregroundColor: theme.colorScheme.onSecondaryContainer,
+                        backgroundColor: const Color(0xFF2B4D58),
+                        foregroundColor: Colors.white,
                         onPressed: () => setState(() => _chatExpanded = !_chatExpanded),
                         tooltip: _chatExpanded ? '顯示角色' : '展開聊天',
                         child: Icon(_chatExpanded ? Icons.person : Icons.chat_bubble_outline),
@@ -324,8 +334,8 @@ class _CharacterScreenState extends State<CharacterScreen>
                         const SizedBox(width: 8),
                         FloatingActionButton.small(
                           heroTag: 'mirror_resp',
-                          backgroundColor: theme.colorScheme.tertiaryContainer,
-                          foregroundColor: theme.colorScheme.onTertiaryContainer,
+                          backgroundColor: const Color(0xFFC99742),
+                          foregroundColor: Colors.white,
                           onPressed: () => _showMirrorResponse(provider),
                           tooltip: '映照視角',
                           child: const Icon(Icons.favorite_border),
@@ -465,28 +475,15 @@ class _RelationshipBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = {
-      '陌生人':   (Colors.grey.shade600,  Colors.grey.shade100),
-      '普通朋友': (Colors.blue.shade600,  Colors.blue.shade50),
-      '熟悉':    (Colors.teal.shade600,  Colors.teal.shade50),
-      '好友':    (Colors.green.shade700, Colors.green.shade50),
-      '曖昧':    (Colors.pink.shade600,  Colors.pink.shade50),
-      '親密':    (Colors.red.shade600,   Colors.red.shade50),
-    };
-    final (fg, bg) = colors[relationship] ??
-        (Colors.grey.shade600, Colors.grey.shade100);
     const icons = {
       '陌生人': '👤', '普通朋友': '😊', '熟悉': '🙂',
       '好友': '😄', '曖昧': '💗', '親密': '❤️'
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-          color: bg, borderRadius: BorderRadius.circular(12)),
-      child: Text(
-        '${icons[relationship] ?? ''} $relationship',
-        style: TextStyle(fontSize: 11, color: fg, fontWeight: FontWeight.w600),
-      ),
+    final ico = icons[relationship] ?? '✨';
+    return OrnatePlaqueBadge(
+      label: '$ico $relationship',
+      fontSize: 10.5,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
     );
   }
 }
@@ -510,34 +507,26 @@ class _ExpProgressBar extends StatelessWidget {
             ? 1.0
             : (exp - current) / (next - current);
     final rel = profile.relationshipLevel;
-    final colors = {
-      '陌生人':   const Color(0xFF9E9E9E),
-      '普通朋友': const Color(0xFF2196F3),
-      '熟悉':    const Color(0xFF009688),
-      '好友':    const Color(0xFF4CAF50),
-      '曖昧':    const Color(0xFFE91E63),
-      '親密':    const Color(0xFFF44336),
-    };
-    final barColor = colors[rel] ?? theme.colorScheme.primary;
+    final barColor = const Color(0xFFC99742);
 
     return Container(
       color: theme.colorScheme.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(rel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
-              color: barColor)),
+          Text(rel, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
+              color: Color(0xFFC99742))),
           Text(next < 0 ? '已達最高' : '$exp / $next EXP',
               style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
         ]),
-        const SizedBox(height: 3),
+        const SizedBox(height: 5),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: ratio.clamp(0.0, 1.0),
-            minHeight: 5,
-            backgroundColor: barColor.withOpacity(0.15),
-            valueColor: AlwaysStoppedAnimation(barColor),
+            minHeight: 6,
+            backgroundColor: const Color(0xFFC99742).withOpacity(0.18),
+            valueColor: const AlwaysStoppedAnimation(Color(0xFFC99742)),
           ),
         ),
       ]),
@@ -616,8 +605,14 @@ class _ChatBubble extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: isUser
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.surfaceContainerHighest,
+                    ? const Color(0xFFC99742)
+                    : const Color(0xFF2B4D58).withOpacity(0.12),
+                border: Border.all(
+                  color: isUser
+                      ? const Color(0xFF9E7127)
+                      : const Color(0xFF2B4D58).withOpacity(0.35),
+                  width: 1,
+                ),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),

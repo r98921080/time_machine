@@ -13,6 +13,7 @@ import '../settings/settings_screen.dart';
 import 'stats_widgets.dart';
 import '../../widgets/activity_ring.dart';
 import '../../widgets/doll_character.dart';
+import '../../widgets/art_frame_widgets.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -467,12 +468,12 @@ class _CompanionHeroCardState extends State<_CompanionHeroCard> {
 
     return Card(
       clipBehavior: Clip.antiAlias,
-      elevation: 0,
+      elevation: 1,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: theme.colorScheme.primary.withOpacity(0.15),
-          width: 1,
+          color: const Color(0xFFC99742).withOpacity(0.4),
+          width: 1.2,
         ),
       ),
       child: Container(
@@ -481,7 +482,7 @@ class _CompanionHeroCardState extends State<_CompanionHeroCard> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              theme.colorScheme.primaryContainer.withOpacity(0.40),
+              const Color(0xFFC99742).withOpacity(0.12),
               theme.colorScheme.surface,
             ],
           ),
@@ -489,17 +490,36 @@ class _CompanionHeroCardState extends State<_CompanionHeroCard> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
-            DollCharacterWidget(
-              appearance: character,
-              gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
-              isMirror: isMirror,
-              width: 90,
+            OrnateFrameBox(
+              width: 95,
               height: 140,
-              enableAnimation: true,
-              interactive: true,
-              onTap: _onTapCompanion,
+              padding: const EdgeInsets.all(4),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    decoration: const BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment(0, -0.1),
+                        radius: 0.9,
+                        colors: [Color(0xFFF3E2B8), Color(0xFFD4A864), Color(0xFF8B6432)],
+                      ),
+                    ),
+                  ),
+                  DollCharacterWidget(
+                    appearance: character,
+                    gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
+                    isMirror: isMirror,
+                    width: 85,
+                    height: 130,
+                    enableAnimation: true,
+                    interactive: true,
+                    onTap: _onTapCompanion,
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -511,36 +531,28 @@ class _CompanionHeroCardState extends State<_CompanionHeroCard> {
                         provider.characterName,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          'Lv.$level ${provider.relationship}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
+                      OrnatePlaqueBadge(
+                        label: 'Lv.$level ${provider.relationship}',
+                        fontSize: 10,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surface.withOpacity(0.92),
+                      color: theme.colorScheme.surface,
                       borderRadius: const BorderRadius.only(
                         topRight: Radius.circular(12),
                         bottomLeft: Radius.circular(12),
                         bottomRight: Radius.circular(12),
                       ),
+                      border: Border.all(color: const Color(0xFFC99742).withOpacity(0.25)),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.04),
@@ -569,6 +581,7 @@ class _CompanionHeroCardState extends State<_CompanionHeroCard> {
                             value: expInLevel / 100.0,
                             minHeight: 5,
                             backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                            valueColor: const AlwaysStoppedAnimation(Color(0xFFC99742)),
                           ),
                         ),
                       ),
