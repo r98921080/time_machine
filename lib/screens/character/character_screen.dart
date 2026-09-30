@@ -744,122 +744,62 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
                     borderRadius: BorderRadius.circular(2))),
           ),
           const SizedBox(height: 16),
-          Text('自訂外觀與配件', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          Text('自訂外觀特徵', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          // 導向商城的精緻金屬感橫幅
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFFC99742).withOpacity(0.18),
+                  const Color(0xFF8B6428).withOpacity(0.08),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFC99742).withOpacity(0.4)),
+            ),
+            child: Row(
+              children: [
+                const Text('🛍️', style: TextStyle(fontSize: 24)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '商城試衣間開放中',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFC99742),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '透過達成目標累積成長點數，兌換解鎖更多精美服飾與特色配件！',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ShopScreen()),
+                    );
+                  },
+                  child: const Text('前往商城', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
-          _SectionLabel('自訂全身服飾', theme),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildSimpleOption(
-                label: '歐式宮廷禮服',
-                selected: _appearance.outfitId == null || _appearance.outfitId == 'outfit_victorian' || _appearance.outfitId == 'outfit_scholar',
-                onTap: () => setState(() => _appearance = _appearance.copyWith(outfitId: 'outfit_victorian')),
-              ),
-              _buildSimpleOption(
-                label: '天藍宮廷裙裝',
-                selected: _appearance.outfitId == 'outfit_sundress' || _appearance.outfitId == 'outfit_princess',
-                onTap: () => setState(() => _appearance = _appearance.copyWith(outfitId: 'outfit_sundress')),
-              ),
-              _buildSimpleOption(
-                label: '俐落學院正裝',
-                selected: _appearance.outfitId == 'outfit_formal_suit',
-                onTap: () => setState(() => _appearance = _appearance.copyWith(outfitId: 'outfit_formal_suit')),
-              ),
-              _buildSimpleOption(
-                label: '街頭連帽夾克',
-                selected: _appearance.outfitId == 'outfit_casual_hoodie',
-                onTap: () => setState(() => _appearance = _appearance.copyWith(outfitId: 'outfit_casual_hoodie')),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _SectionLabel('特色飾品與配件', theme),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildSimpleOption(
-                label: '金絲細框眼鏡',
-                selected: _appearance.accessories.contains('acc_glasses_round'),
-                onTap: () {
-                  final list = List<String>.from(_appearance.accessories);
-                  if (list.contains('acc_glasses_round')) {
-                    list.remove('acc_glasses_round');
-                  } else {
-                    list.add('acc_glasses_round');
-                  }
-                  setState(() => _appearance = _appearance.copyWith(accessories: list));
-                },
-              ),
-              _buildSimpleOption(
-                label: '璀璨黃金王冠',
-                selected: _appearance.accessories.contains('acc_crown_gold'),
-                onTap: () {
-                  final list = List<String>.from(_appearance.accessories);
-                  if (list.contains('acc_crown_gold')) {
-                    list.remove('acc_crown_gold');
-                  } else {
-                    list.add('acc_crown_gold');
-                  }
-                  setState(() => _appearance = _appearance.copyWith(accessories: list));
-                },
-              ),
-              _buildSimpleOption(
-                label: '皇家藍蝴蝶結',
-                selected: _appearance.accessories.contains('acc_ribbon_blue'),
-                onTap: () {
-                  final list = List<String>.from(_appearance.accessories);
-                  if (list.contains('acc_ribbon_blue')) {
-                    list.remove('acc_ribbon_blue');
-                  } else {
-                    list.add('acc_ribbon_blue');
-                  }
-                  setState(() => _appearance = _appearance.copyWith(accessories: list));
-                },
-              ),
-              _buildSimpleOption(
-                label: '閃亮星芒耳環',
-                selected: _appearance.accessories.contains('acc_earring_star'),
-                onTap: () {
-                  final list = List<String>.from(_appearance.accessories);
-                  if (list.contains('acc_earring_star')) {
-                    list.remove('acc_earring_star');
-                  } else {
-                    list.add('acc_earring_star');
-                  }
-                  setState(() => _appearance = _appearance.copyWith(accessories: list));
-                },
-              ),
-              _buildSimpleOption(
-                label: '純白天使羽翼',
-                selected: _appearance.accessories.contains('acc_wings_angel'),
-                onTap: () {
-                  final list = List<String>.from(_appearance.accessories);
-                  if (list.contains('acc_wings_angel')) {
-                    list.remove('acc_wings_angel');
-                  } else {
-                    list.add('acc_wings_angel');
-                  }
-                  setState(() => _appearance = _appearance.copyWith(accessories: list));
-                },
-              ),
-              _buildSimpleOption(
-                label: '可愛貓咪鬍鬚',
-                selected: _appearance.accessories.contains('face_cat_whiskers'),
-                onTap: () {
-                  final list = List<String>.from(_appearance.accessories);
-                  if (list.contains('face_cat_whiskers')) {
-                    list.remove('face_cat_whiskers');
-                  } else {
-                    list.add('face_cat_whiskers');
-                  }
-                  setState(() => _appearance = _appearance.copyWith(accessories: list));
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
           _SectionLabel('膚色', theme),
           _EnumRow<SkinTone>(
             values: SkinTone.values,
@@ -895,37 +835,6 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
             child: const Text('儲存'),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSimpleOption({
-    required String label,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? const Color(0xFFC99742).withOpacity(0.18)
-              : Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
-          border: selected
-              ? Border.all(color: const Color(0xFFC99742), width: 2)
-              : null,
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-            color: selected ? const Color(0xFFC99742) : null,
-          ),
-        ),
       ),
     );
   }

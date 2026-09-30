@@ -10,12 +10,14 @@ import '../../widgets/art_frame_widgets.dart';
 // ── Catalog (120+ items) ───────────────────────────────────────────────────
 final _catalog = <ShopItem>[
   // ── 服飾 ──
+  ShopItem(id: 'outfit_sport_set', name: '活力運動服', category: ShopCategory.outfit,
+      price: 0, description: '舒適排汗機能運動套裝（預設基礎服飾）', emoji: '🏃'),
+  ShopItem(id: 'outfit_pajamas', name: '溫馨家居睡衣', category: ShopCategory.outfit,
+      price: 0, description: '放鬆舒適的親膚居家睡衣（預設基礎服飾）', emoji: '🛌'),
   ShopItem(id: 'outfit_tshirt_white', name: '白色T恤', category: ShopCategory.outfit,
       price: 30, description: '簡約百搭的白色基本款', emoji: '👕'),
   ShopItem(id: 'outfit_casual_hoodie', name: '連帽衫', category: ShopCategory.outfit,
       price: 50, description: '舒適保暖的帽T', emoji: '👚'),
-  ShopItem(id: 'outfit_sport_set', name: '運動套裝', category: ShopCategory.outfit,
-      price: 80, description: '高機能排汗運動服', emoji: '🏃'),
   ShopItem(id: 'outfit_denim_jacket', name: '牛仔外套', category: ShopCategory.outfit,
       price: 90, description: '街頭感牛仔外套', emoji: '👖'),
   ShopItem(id: 'outfit_formal_suit', name: '西裝套裝', category: ShopCategory.outfit,
@@ -292,7 +294,19 @@ class _ShopScreenState extends State<ShopScreen>
     final cat = item.id.split('_').first;
     switch (cat) {
       case 'outfit':
+        if (item.id == 'outfit_sport_set') {
+          return char.outfitId == null || char.outfitId == 'outfit_sport_set';
+        }
         return char.outfitId == item.id;
+      case 'hair':
+        final id = item.id;
+        if (id == 'hair_bob') return char.hairStyle == HairStyle.short;
+        if (id == 'hair_long_wave' || id == 'hair_galaxy') return char.hairStyle == HairStyle.long;
+        if (id == 'hair_bun_space' || id == 'hair_braided_bun') return char.hairStyle == HairStyle.bun;
+        if (id == 'hair_ponytail_high') return char.hairStyle == HairStyle.ponytail;
+        if (id == 'hair_curly' || id == 'hair_afro') return char.hairStyle == HairStyle.curly;
+        if (id == 'hair_silver') return char.hairColor == HairColor.gray;
+        return false;
       case 'bg':
         return char.backgroundId == item.id;
       case 'acc':
@@ -370,7 +384,9 @@ class _ShopScreenState extends State<ShopScreen>
                         ),
                         DollCharacterWidget(
                           appearance: character,
-                          gender: provider.profile?.sex ?? '她',
+                          gender: provider.profile?.characterMode == CharacterMode.mirror
+                              ? (provider.profile?.mirrorGender ?? '她')
+                              : (provider.profile?.sex ?? '男'),
                           isMirror: provider.profile?.characterMode == CharacterMode.mirror,
                           width: 95,
                           height: 145,
@@ -410,7 +426,7 @@ class _ShopScreenState extends State<ShopScreen>
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          '當前套裝：${character.outfitId == null ? "經典學者" : character.outfitId == "outfit_sundress" ? "天藍宮廷" : character.outfitId == "outfit_formal_suit" ? "學院正裝" : "休閒夾克"}',
+                          '當前套裝：${character.outfitId == null || character.outfitId == "outfit_sport_set" ? "活力運動服（基礎）" : character.outfitId == "outfit_pajamas" ? "溫馨家居睡衣（基礎）" : character.outfitId == "outfit_sundress" ? "天藍碎花洋裝" : character.outfitId == "outfit_formal_suit" ? "學院正裝" : "個性套裝"}',
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -484,13 +500,6 @@ class _ShopScreenState extends State<ShopScreen>
     }
     if (!owned) {
       await _buy(context, provider, item);
-      return;
-    }
-    final cat = item.id.split('_').first;
-    if (cat == 'hair') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${item.name} 將在下次生成角色圖片時套用')),
-      );
       return;
     }
     if (equipped) {

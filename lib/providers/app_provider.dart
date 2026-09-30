@@ -821,14 +821,21 @@ class AppProvider extends ChangeNotifier {
       case 'outfit':
         updated = _character!.copyWith(outfitId: itemId);
       case 'hair':
-        final parts = itemId.split('_');
-        final style = parts.length > 1 ? parts[1] : null;
-        final color = parts.length > 2 ? parts[2] : null;
+        HairStyle newStyle = _character!.hairStyle;
+        HairColor newColor = _character!.hairColor;
+        if (itemId == 'hair_bob') newStyle = HairStyle.short;
+        if (itemId == 'hair_long_wave') newStyle = HairStyle.long;
+        if (itemId == 'hair_bun_space' || itemId == 'hair_braided_bun') newStyle = HairStyle.bun;
+        if (itemId == 'hair_ponytail_high') newStyle = HairStyle.ponytail;
+        if (itemId == 'hair_curly' || itemId == 'hair_afro') newStyle = HairStyle.curly;
+        if (itemId == 'hair_silver') newColor = HairColor.gray;
+        if (itemId == 'hair_galaxy') {
+          newColor = HairColor.fantasy;
+          newStyle = HairStyle.long;
+        }
         updated = _character!.copyWith(
-          hairStyle: style != null ? HairStyle.values.firstWhere(
-            (h) => h.name == style, orElse: () => _character!.hairStyle) : _character!.hairStyle,
-          hairColor: color != null ? HairColor.values.firstWhere(
-            (h) => h.name == color, orElse: () => _character!.hairColor) : _character!.hairColor,
+          hairStyle: newStyle,
+          hairColor: newColor,
         );
       case 'acc':
       case 'face':

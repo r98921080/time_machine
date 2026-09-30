@@ -90,32 +90,37 @@ class _LayeredAnimePortraitWidgetState extends State<LayeredAnimePortraitWidget>
     widget.onTap?.call();
   }
 
-  /// 根據性別、服裝、髮型決定主全身立繪基底
+  /// 根據性別、服裝決定主全身立繪基底（性別絕對鎖定，不受衣服變動而跳轉）
   String _resolveFullbodyAsset() {
     final outfitId = widget.appearance.outfitId;
     final isFemale = widget.gender == '她' || widget.gender == '女';
 
-    // 依據玩家選取的服裝指定全身立繪
-    if (outfitId == 'outfit_sundress' || outfitId == 'outfit_princess' || outfitId == 'special_newyear_outfit') {
-      return 'assets/characters/fullbody_princess.jpg';
-    }
-    if (outfitId == 'outfit_formal_suit' || outfitId == 'outfit_tracksuit' || outfitId == 'outfit_detective') {
-      return isFemale
-          ? 'assets/characters/fullbody_female_suit.jpg'
-          : 'assets/characters/fullbody_scholar.jpg';
-    }
-    if (outfitId == 'outfit_casual_hoodie' || outfitId == 'outfit_tshirt_white' || outfitId == 'outfit_sport_set' || outfitId == 'outfit_denim_jacket') {
-      return 'assets/characters/fullbody_male_casual.jpg';
-    }
-    if (outfitId == 'outfit_school_uniform') {
-      return 'assets/characters/fullbody_female_suit.jpg';
-    }
-
-    // 預設依性別/映照角色提供全身立繪
     if (isFemale) {
-      return 'assets/characters/fullbody_princess.jpg';
+      // 女性立繪基底
+      if (outfitId == 'outfit_pajamas') {
+        return 'assets/characters/female_base_pajamas.jpg';
+      }
+      if (outfitId == 'outfit_sundress' || outfitId == 'outfit_princess' || outfitId == 'special_newyear_outfit') {
+        return 'assets/characters/fullbody_princess.jpg';
+      }
+      if (outfitId == 'outfit_formal_suit' || outfitId == 'outfit_tracksuit' || outfitId == 'outfit_detective' || outfitId == 'outfit_school_uniform') {
+        return 'assets/characters/fullbody_female_suit.jpg';
+      }
+      // 基礎預設或運動休閒服裝均呈現女版運動服
+      return 'assets/characters/female_base_sporty.jpg';
     } else {
-      return 'assets/characters/fullbody_scholar.jpg';
+      // 男性立繪基底
+      if (outfitId == 'outfit_pajamas') {
+        return 'assets/characters/male_base_pajamas.jpg';
+      }
+      if (outfitId == 'outfit_formal_suit' || outfitId == 'outfit_scholar' || outfitId == 'outfit_tracksuit' || outfitId == 'outfit_detective') {
+        return 'assets/characters/fullbody_scholar.jpg';
+      }
+      if (outfitId == 'outfit_casual_hoodie' || outfitId == 'outfit_tshirt_white' || outfitId == 'outfit_denim_jacket') {
+        return 'assets/characters/fullbody_male_casual.jpg';
+      }
+      // 基礎預設或運動休閒服裝均呈現男版運動服
+      return 'assets/characters/male_base_sporty.jpg';
     }
   }
 
@@ -123,31 +128,31 @@ class _LayeredAnimePortraitWidgetState extends State<LayeredAnimePortraitWidget>
   Color _resolveSkinTint(SkinTone tone) {
     switch (tone) {
       case SkinTone.light:
-        return const Color(0xFFFFF7F0); // 透白柔光
+        return const Color(0xFFFFF6ED).withOpacity(0.18); // 柔白粉嫩
       case SkinTone.medium:
         return Colors.transparent; // 原生中等膚色
       case SkinTone.tan:
-        return const Color(0xFFC68A55).withOpacity(0.24); // 健康小麥色微光
+        return const Color(0xFFB8783C).withOpacity(0.32); // 健康陽光小麥色
       case SkinTone.dark:
-        return const Color(0xFF7A4A28).withOpacity(0.38); // 深沉古銅膚色
+        return const Color(0xFF5E361A).withOpacity(0.45); // 深沉古銅膚色
     }
   }
 
-  /// 髮色疊色濾鏡
+  /// 鮮明立體的髮色疊色渲染
   Color? _resolveHairColorOverlay(HairColor color) {
     switch (color) {
       case HairColor.black:
-        return const Color(0xFF1A1A1A).withOpacity(0.18);
+        return const Color(0xFF151515).withOpacity(0.55);
       case HairColor.brown:
-        return const Color(0xFF5D3A1A).withOpacity(0.20);
+        return const Color(0xFF6B3A18).withOpacity(0.45);
       case HairColor.blonde:
-        return const Color(0xFFFFD700).withOpacity(0.25);
+        return const Color(0xFFFFCC00).withOpacity(0.50);
       case HairColor.red:
-        return const Color(0xFFDC2626).withOpacity(0.22);
+        return const Color(0xFFDC2626).withOpacity(0.48);
       case HairColor.gray:
-        return const Color(0xFFE2E8F0).withOpacity(0.32);
+        return const Color(0xFFCBD5E1).withOpacity(0.55);
       case HairColor.fantasy:
-        return const Color(0xFF8B5CF6).withOpacity(0.28);
+        return const Color(0xFF8B5CF6).withOpacity(0.52);
     }
   }
 
@@ -240,13 +245,14 @@ class _LayeredAnimePortraitWidgetState extends State<LayeredAnimePortraitWidget>
                         ),
                       ),
 
-                    // 4. 髮色漸層光感層 (若自訂特殊髮色)
+                    // 4. 髮色與髮型動態疊加系統 (Hair Overlay & Style Silhouette)
+                    // 根據玩家自訂之髮色與髮型，精準覆蓋於頭頂至耳際區域
                     if (hairOverlay != null)
                       Positioned(
-                        top: widget.height * 0.03,
-                        left: widget.width * 0.25,
-                        width: widget.width * 0.50,
-                        height: widget.height * 0.25,
+                        top: widget.height * 0.05,
+                        left: widget.width * 0.32,
+                        width: widget.width * 0.36,
+                        height: widget.height * 0.12,
                         child: IgnorePointer(
                           child: Container(
                             decoration: BoxDecoration(
@@ -254,74 +260,90 @@ class _LayeredAnimePortraitWidgetState extends State<LayeredAnimePortraitWidget>
                               gradient: RadialGradient(
                                 colors: [
                                   hairOverlay,
+                                  hairOverlay.withOpacity(0.2),
                                   Colors.transparent,
                                 ],
+                                stops: const [0.0, 0.65, 1.0],
                               ),
                             ),
                           ),
                         ),
                       ),
 
-                    // 5. 髮型輪廓特徵動態渲染 (配合玩家髮型切換：馬尾/包子頭/波浪)
-                    if (widget.appearance.hairStyle == HairStyle.ponytail ||
-                        widget.appearance.hairStyle == HairStyle.bun ||
-                        widget.appearance.hairStyle == HairStyle.curly)
-                      Positioned(
-                        top: widget.height * 0.05,
+                    // 5. 髮型輪廓特徵動態渲染 (配合玩家髮型切換：短髮/中長髮/長髮/包子頭/馬尾/捲髮)
+                    Positioned(
+                      top: widget.height * 0.04,
+                      left: widget.width * 0.20,
+                      width: widget.width * 0.60,
+                      height: widget.height * 0.20,
+                      child: IgnorePointer(
                         child: CustomPaint(
-                          size: Size(widget.width * 0.70, widget.height * 0.18),
-                          painter: _HairStyleAccentPainter(style: widget.appearance.hairStyle),
+                          size: Size(widget.width * 0.60, widget.height * 0.20),
+                          painter: _HairStyleAccentPainter(
+                            style: widget.appearance.hairStyle,
+                            color: hairOverlay ?? const Color(0xFF221712),
+                          ),
                         ),
                       ),
+                    ),
 
-                    // 6. 實體飾品動態配件圖層 (Accessories Layer - 全身比例座標精準校對)
-                    // (A) 黃金璀璨王冠
+                    // 6. 實體飾品動態配件圖層 (Accessories Layer - 全身比例座標精準校對，完美貼合五官)
+                    // (A) 黃金璀璨王冠 (頭頂中心 y = 0.045)
                     if (hasCrown)
                       Positioned(
-                        top: widget.height * 0.025,
+                        top: widget.height * 0.042,
                         child: CustomPaint(
-                          size: Size(widget.width * 0.32, widget.height * 0.09),
+                          size: Size(widget.width * 0.28, widget.height * 0.075),
                           painter: _CrownAccessoryPainter(),
                         ),
                       ),
 
-                    // (B) 金絲細框眼鏡
+                    // (B) 金絲細框眼鏡 (雙眼中心 y = 0.138, 寬度與眼距精準校正)
                     if (hasGlasses)
                       Positioned(
-                        top: widget.height * 0.115,
+                        top: widget.height * 0.138 - (widget.height * 0.045 / 2),
                         child: CustomPaint(
-                          size: Size(widget.width * 0.28, widget.height * 0.06),
+                          size: Size(widget.width * 0.25, widget.height * 0.045),
                           painter: _GlassesAccessoryPainter(),
                         ),
                       ),
 
-                    // (C) 皇家藍蝴蝶結 / 領結
+                    // (C) 皇家藍蝴蝶結 / 領結 (領口 y = 0.205)
                     if (hasRibbon)
                       Positioned(
-                        top: widget.height * 0.19,
+                        top: widget.height * 0.205,
                         child: CustomPaint(
-                          size: Size(widget.width * 0.18, widget.height * 0.06),
+                          size: Size(widget.width * 0.20, widget.height * 0.06),
                           painter: _RibbonAccessoryPainter(),
                         ),
                       ),
 
-                    // (D) 星星垂墜耳環
-                    if (hasStarEarring)
+                    // (D) 星星垂墜耳環 (耳際 y = 0.145)
+                    if (hasStarEarring) ...[
                       Positioned(
-                        top: widget.height * 0.13,
-                        left: widget.width * 0.32,
+                        top: widget.height * 0.142,
+                        left: widget.width * 0.36,
                         child: CustomPaint(
-                          size: Size(widget.width * 0.06, widget.height * 0.06),
+                          size: Size(widget.width * 0.05, widget.height * 0.05),
                           painter: _StarEarringPainter(),
                         ),
                       ),
+                      Positioned(
+                        top: widget.height * 0.142,
+                        right: widget.width * 0.36,
+                        child: CustomPaint(
+                          size: Size(widget.width * 0.05, widget.height * 0.05),
+                          painter: _StarEarringPainter(),
+                        ),
+                      ),
+                    ],
 
-                    // (E) 貓咪腮紅鬍鬚面飾
+                    // (E) 貓咪腮紅鬍鬚面飾 (臉頰兩側 y = 0.142)
                     if (hasCatWhiskers)
                       Positioned(
-                        top: widget.height * 0.125,
+                        top: widget.height * 0.140,
                         child: CustomPaint(
-                          size: Size(widget.width * 0.35, widget.height * 0.05),
+                          size: Size(widget.width * 0.32, widget.height * 0.045),
                           painter: _CatWhiskersPainter(),
                         ),
                       ),
@@ -379,59 +401,198 @@ class _LayeredAnimePortraitWidgetState extends State<LayeredAnimePortraitWidget>
 
 class _HairStyleAccentPainter extends CustomPainter {
   final HairStyle style;
-  const _HairStyleAccentPainter({required this.style});
+  final Color color;
+  const _HairStyleAccentPainter({required this.style, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final p = Paint()
-      ..color = const Color(0xFF3B271A).withOpacity(0.65)
+
+    // 髮絲漸層底色與亮光
+    final fillPaint = Paint()
+      ..color = color.withOpacity(0.68)
       ..style = PaintingStyle.fill;
 
-    if (style == HairStyle.ponytail) {
-      // 馬尾蓬鬆輪廓
-      canvas.drawOval(Rect.fromCenter(center: Offset(w * 0.12, h * 0.35), width: w * 0.16, height: h * 0.65), p);
-    } else if (style == HairStyle.bun) {
-      // 俏皮包子頭丸子
-      canvas.drawCircle(Offset(w * 0.15, h * 0.2), w * 0.12, p);
-      canvas.drawCircle(Offset(w * 0.85, h * 0.2), w * 0.12, p);
+    final highlightPaint = Paint()
+      ..color = Colors.white.withOpacity(0.25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8;
+
+    switch (style) {
+      case HairStyle.short:
+        // 短髮：俐落劉海微翹
+        final path = Path()
+          ..moveTo(w * 0.30, h * 0.30)
+          ..quadraticBezierTo(w * 0.50, h * 0.20, w * 0.70, h * 0.30)
+          ..quadraticBezierTo(w * 0.78, h * 0.45, w * 0.72, h * 0.60)
+          ..lineTo(w * 0.66, h * 0.48)
+          ..lineTo(w * 0.50, h * 0.52)
+          ..lineTo(w * 0.34, h * 0.48)
+          ..lineTo(w * 0.28, h * 0.60)
+          ..quadraticBezierTo(w * 0.22, h * 0.45, w * 0.30, h * 0.30)
+          ..close();
+        canvas.drawPath(path, fillPaint);
+        canvas.drawArc(
+          Rect.fromCenter(center: Offset(w * 0.50, h * 0.32), width: w * 0.32, height: h * 0.15),
+          3.14,
+          3.14,
+          false,
+          highlightPaint,
+        );
+        break;
+
+      case HairStyle.medium:
+        // 中長髮：自然垂落兩側至肩
+        final leftLock = Path()
+          ..moveTo(w * 0.25, h * 0.35)
+          ..quadraticBezierTo(w * 0.18, h * 0.65, w * 0.22, h * 0.95)
+          ..quadraticBezierTo(w * 0.28, h * 0.70, w * 0.32, h * 0.45)
+          ..close();
+        final rightLock = Path()
+          ..moveTo(w * 0.75, h * 0.35)
+          ..quadraticBezierTo(w * 0.82, h * 0.65, w * 0.78, h * 0.95)
+          ..quadraticBezierTo(w * 0.72, h * 0.70, w * 0.68, h * 0.45)
+          ..close();
+        canvas.drawPath(leftLock, fillPaint);
+        canvas.drawPath(rightLock, fillPaint);
+        break;
+
+      case HairStyle.long:
+        // 長髮：飄逸垂至腰間大波浪輪廓
+        final leftLong = Path()
+          ..moveTo(w * 0.24, h * 0.30)
+          ..cubicTo(w * 0.12, h * 0.60, w * 0.15, h * 0.85, w * 0.20, h * 1.0)
+          ..cubicTo(w * 0.26, h * 0.85, w * 0.28, h * 0.60, w * 0.32, h * 0.40)
+          ..close();
+        final rightLong = Path()
+          ..moveTo(w * 0.76, h * 0.30)
+          ..cubicTo(w * 0.88, h * 0.60, w * 0.85, h * 0.85, w * 0.80, h * 1.0)
+          ..cubicTo(w * 0.74, h * 0.85, w * 0.72, h * 0.60, w * 0.68, h * 0.40)
+          ..close();
+        canvas.drawPath(leftLong, fillPaint);
+        canvas.drawPath(rightLong, fillPaint);
+        break;
+
+      case HairStyle.bun:
+        // 包子頭：左右雙丸子帶精緻髮簪結
+        final leftBun = Rect.fromCenter(center: Offset(w * 0.18, h * 0.25), width: w * 0.20, height: h * 0.28);
+        final rightBun = Rect.fromCenter(center: Offset(w * 0.82, h * 0.25), width: w * 0.20, height: h * 0.28);
+        canvas.drawOval(leftBun, fillPaint);
+        canvas.drawOval(rightBun, fillPaint);
+        canvas.drawArc(leftBun, 3.8, 1.8, false, highlightPaint);
+        canvas.drawArc(rightBun, 3.8, 1.8, false, highlightPaint);
+        break;
+
+      case HairStyle.ponytail:
+        // 馬尾：後腦高昂蓬鬆束髮
+        final tail = Path()
+          ..moveTo(w * 0.65, h * 0.28)
+          ..cubicTo(w * 0.90, h * 0.20, w * 0.95, h * 0.55, w * 0.80, h * 0.88)
+          ..cubicTo(w * 0.75, h * 0.65, w * 0.72, h * 0.45, w * 0.62, h * 0.36)
+          ..close();
+        canvas.drawPath(tail, fillPaint);
+        canvas.drawPath(tail, highlightPaint);
+        // 髮圈點綴
+        canvas.drawCircle(Offset(w * 0.65, h * 0.30), 4.0, Paint()..color = const Color(0xFFC99742));
+        break;
+
+      case HairStyle.curly:
+        // 捲髮：層次感微捲空氣劉海與兩側捲髮
+        final leftCurl = Path()
+          ..moveTo(w * 0.22, h * 0.35)
+          ..quadraticBezierTo(w * 0.12, h * 0.55, w * 0.22, h * 0.72)
+          ..quadraticBezierTo(w * 0.14, h * 0.85, w * 0.24, h * 0.96)
+          ..quadraticBezierTo(w * 0.28, h * 0.70, w * 0.30, h * 0.45)
+          ..close();
+        final rightCurl = Path()
+          ..moveTo(w * 0.78, h * 0.35)
+          ..quadraticBezierTo(w * 0.88, h * 0.55, w * 0.78, h * 0.72)
+          ..quadraticBezierTo(w * 0.86, h * 0.85, w * 0.76, h * 0.96)
+          ..quadraticBezierTo(w * 0.72, h * 0.70, w * 0.70, h * 0.45)
+          ..close();
+        canvas.drawPath(leftCurl, fillPaint);
+        canvas.drawPath(rightCurl, fillPaint);
+        break;
     }
   }
 
   @override
-  bool shouldRepaint(covariant _HairStyleAccentPainter old) => old.style != style;
+  bool shouldRepaint(covariant _HairStyleAccentPainter old) =>
+      old.style != style || old.color != color;
 }
 
-// ── 配件繪製器 (全身立繪比例金屬飾品) ──────────────────────────
+// ── 配件繪製器 (全身立繪比例金屬飾品 - 精準校對五官) ───────────────────
 
 class _GlassesAccessoryPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final r = h * 0.40;
+    final r = h * 0.42;
 
-    final paint = Paint()
-      ..color = const Color(0xFFC99742) // 古典金絲
+    // 陰影投射，增強立體層次
+    final shadowPaint = Paint()
+      ..color = Colors.black26
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
 
-    // 左眼鏡框
-    final leftCenter = Offset(w * 0.32, h * 0.50);
-    canvas.drawCircle(leftCenter, r, paint);
-    canvas.drawCircle(leftCenter, r - 0.8, Paint()..color = Colors.white.withOpacity(0.18));
+    final leftCenter = Offset(w * 0.30, h * 0.50);
+    final rightCenter = Offset(w * 0.70, h * 0.50);
 
-    // 右眼鏡框
-    final rightCenter = Offset(w * 0.68, h * 0.50);
-    canvas.drawCircle(rightCenter, r, paint);
-    canvas.drawCircle(rightCenter, r - 0.8, Paint()..color = Colors.white.withOpacity(0.18));
+    // 投射微陰影
+    canvas.drawCircle(leftCenter.translate(0, 1.0), r, shadowPaint);
+    canvas.drawCircle(rightCenter.translate(0, 1.0), r, shadowPaint);
 
-    // 鼻樑金屬橫槓
+    // 典雅金絲金屬漸層鏡框
+    final framePaint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFFFFDF85), Color(0xFFC99742), Color(0xFF8B6428)],
+      ).createShader(Rect.fromLTWH(0, 0, w, h))
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6;
+
+    // 左眼鏡框與鏡片高光
+    canvas.drawCircle(leftCenter, r, framePaint);
+    canvas.drawCircle(leftCenter, r - 1.0, Paint()..color = const Color(0xFF93C5FD).withOpacity(0.12));
+
+    // 右眼鏡框與鏡片高光
+    canvas.drawCircle(rightCenter, r, framePaint);
+    canvas.drawCircle(rightCenter, r - 1.0, Paint()..color = const Color(0xFF93C5FD).withOpacity(0.12));
+
+    // 鏡片反光條 (日漫眼鏡標誌性白色反光)
+    final reflectionPaint = Paint()
+      ..color = Colors.white.withOpacity(0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawLine(
+      Offset(leftCenter.dx - r * 0.5, leftCenter.dy - r * 0.4),
+      Offset(leftCenter.dx - r * 0.1, leftCenter.dy - r * 0.7),
+      reflectionPaint,
+    );
+    canvas.drawLine(
+      Offset(rightCenter.dx - r * 0.5, rightCenter.dy - r * 0.4),
+      Offset(rightCenter.dx - r * 0.1, rightCenter.dy - r * 0.7),
+      reflectionPaint,
+    );
+
+    // 鼻樑中樑橫槓
     canvas.drawLine(
       Offset(leftCenter.dx + r, h * 0.48),
       Offset(rightCenter.dx - r, h * 0.48),
-      paint,
+      framePaint,
+    );
+
+    // 左右鏡腿延伸
+    canvas.drawLine(
+      Offset(leftCenter.dx - r, h * 0.48),
+      Offset(w * 0.05, h * 0.45),
+      framePaint,
+    );
+    canvas.drawLine(
+      Offset(rightCenter.dx + r, h * 0.48),
+      Offset(w * 0.95, h * 0.45),
+      framePaint,
     );
   }
 
