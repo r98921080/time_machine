@@ -250,7 +250,7 @@ class _CharacterScreenState extends State<CharacterScreen>
                     height: _chatExpanded ? 180 : 340,
                     padding: const EdgeInsets.all(6),
                     showBadge: !_chatExpanded,
-                    badgeText: isMirror ? (profile.mirrorGender ?? '映照伴侶') : charName,
+                    badgeText: '$charName (${(profile.mirrorGender ?? '她') == '她' ? '♀' : '♂'})',
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
@@ -800,6 +800,58 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
             ),
           ),
           const SizedBox(height: 16),
+          _SectionLabel('伴侶性別', theme),
+          Row(
+            children: [
+              Expanded(
+                child: ChoiceChip(
+                  label: const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 4),
+                      child: Text('女性伴侶 ♀', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  selected: (widget.provider.profile?.mirrorGender ?? '她') == '她',
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() {
+                        _appearance = _appearance.copyWith(gender: '她');
+                      });
+                      final p = widget.provider.profile;
+                      if (p != null) {
+                        widget.provider.updateProfile(p.copyWith(mirrorGender: '她'));
+                      }
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ChoiceChip(
+                  label: const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 4),
+                      child: Text('男性伴侶 ♂', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  selected: (widget.provider.profile?.mirrorGender ?? '她') == '他' ||
+                      (widget.provider.profile?.mirrorGender ?? '她') == '男',
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() {
+                        _appearance = _appearance.copyWith(gender: '他');
+                      });
+                      final p = widget.provider.profile;
+                      if (p != null) {
+                        widget.provider.updateProfile(p.copyWith(mirrorGender: '他'));
+                      }
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           _SectionLabel('膚色', theme),
           _EnumRow<SkinTone>(
             values: SkinTone.values,
@@ -809,20 +861,11 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
                 setState(() => _appearance = _appearance.copyWith(skinTone: v)),
           ),
           const SizedBox(height: 12),
-          _SectionLabel('髮型', theme),
-          _EnumRow<HairStyle>(
-            values: HairStyle.values,
-            selected: _appearance.hairStyle,
-            labels: ['短髮', '中長髮', '長髮', '包子頭', '馬尾', '捲髮'],
-            onTap: (v) => setState(
-                () => _appearance = _appearance.copyWith(hairStyle: v)),
-          ),
-          const SizedBox(height: 12),
           _SectionLabel('髮色', theme),
           _EnumRow<HairColor>(
             values: HairColor.values,
             selected: _appearance.hairColor,
-            labels: ['黑髮', '棕髮', '金髮', '紅髮', '銀髮', '幻想色'],
+            labels: ['原生黑', '優雅棕', '璀璨金', '緋紅', '月光銀', '星河漸層'],
             onTap: (v) => setState(
                 () => _appearance = _appearance.copyWith(hairColor: v)),
           ),
@@ -832,7 +875,7 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
               await widget.provider.updateCharacterAppearance(_appearance);
               if (context.mounted) Navigator.pop(context);
             },
-            child: const Text('儲存'),
+            child: const Text('儲存外觀設定'),
           ),
         ],
       ),

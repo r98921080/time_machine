@@ -245,47 +245,54 @@ class _LayeredAnimePortraitWidgetState extends State<LayeredAnimePortraitWidget>
                         ),
                       ),
 
-                    // 4. 髮色與髮型動態疊加系統 (Hair Overlay & Style Silhouette)
-                    // 根據玩家自訂之髮色與髮型，精準覆蓋於頭頂至耳際區域
+                    // 4. 自然光影髮色滲透與秀髮高光層 (Natural Anime Hair Luster & Tint)
+                    // 以柔和徑向調色與立繪自帶髮流自然融合，徹底消除生硬突兀與獵奇幾何感
                     if (hairOverlay != null)
                       Positioned(
-                        top: widget.height * 0.05,
-                        left: widget.width * 0.32,
-                        width: widget.width * 0.36,
-                        height: widget.height * 0.12,
+                        top: widget.height * 0.045,
+                        left: widget.width * 0.28,
+                        width: widget.width * 0.44,
+                        height: widget.height * 0.16,
                         child: IgnorePointer(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: RadialGradient(
-                                colors: [
-                                  hairOverlay,
-                                  hairOverlay.withOpacity(0.2),
-                                  Colors.transparent,
-                                ],
-                                stops: const [0.0, 0.65, 1.0],
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // 柔和髮色氛圍光
+                              Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: RadialGradient(
+                                    colors: [
+                                      hairOverlay.withOpacity(0.55),
+                                      hairOverlay.withOpacity(0.25),
+                                      Colors.transparent,
+                                    ],
+                                    stops: const [0.0, 0.60, 1.0],
+                                  ),
+                                ),
                               ),
-                            ),
+                              // 日漫天使光環微光（秀髮高光 Angel Ring Highlight）
+                              Positioned(
+                                top: widget.height * 0.04,
+                                child: Container(
+                                  width: widget.width * 0.26,
+                                  height: 2.5,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(2),
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.white.withOpacity(0.40),
+                                        Colors.transparent,
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-
-                    // 5. 髮型輪廓特徵動態渲染 (配合玩家髮型切換：短髮/中長髮/長髮/包子頭/馬尾/捲髮)
-                    Positioned(
-                      top: widget.height * 0.04,
-                      left: widget.width * 0.20,
-                      width: widget.width * 0.60,
-                      height: widget.height * 0.20,
-                      child: IgnorePointer(
-                        child: CustomPaint(
-                          size: Size(widget.width * 0.60, widget.height * 0.20),
-                          painter: _HairStyleAccentPainter(
-                            style: widget.appearance.hairStyle,
-                            color: hairOverlay ?? const Color(0xFF221712),
-                          ),
-                        ),
-                      ),
-                    ),
 
                     // 6. 實體飾品動態配件圖層 (Accessories Layer - 全身比例座標精準校對，完美貼合五官)
                     // (A) 黃金璀璨王冠 (頭頂中心 y = 0.045)
@@ -397,130 +404,7 @@ class _LayeredAnimePortraitWidgetState extends State<LayeredAnimePortraitWidget>
   }
 }
 
-// ── 髮型特徵動態渲染器 ──────────────────────────────────────────
 
-class _HairStyleAccentPainter extends CustomPainter {
-  final HairStyle style;
-  final Color color;
-  const _HairStyleAccentPainter({required this.style, required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    // 髮絲漸層底色與亮光
-    final fillPaint = Paint()
-      ..color = color.withOpacity(0.68)
-      ..style = PaintingStyle.fill;
-
-    final highlightPaint = Paint()
-      ..color = Colors.white.withOpacity(0.25)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8;
-
-    switch (style) {
-      case HairStyle.short:
-        // 短髮：俐落劉海微翹
-        final path = Path()
-          ..moveTo(w * 0.30, h * 0.30)
-          ..quadraticBezierTo(w * 0.50, h * 0.20, w * 0.70, h * 0.30)
-          ..quadraticBezierTo(w * 0.78, h * 0.45, w * 0.72, h * 0.60)
-          ..lineTo(w * 0.66, h * 0.48)
-          ..lineTo(w * 0.50, h * 0.52)
-          ..lineTo(w * 0.34, h * 0.48)
-          ..lineTo(w * 0.28, h * 0.60)
-          ..quadraticBezierTo(w * 0.22, h * 0.45, w * 0.30, h * 0.30)
-          ..close();
-        canvas.drawPath(path, fillPaint);
-        canvas.drawArc(
-          Rect.fromCenter(center: Offset(w * 0.50, h * 0.32), width: w * 0.32, height: h * 0.15),
-          3.14,
-          3.14,
-          false,
-          highlightPaint,
-        );
-        break;
-
-      case HairStyle.medium:
-        // 中長髮：自然垂落兩側至肩
-        final leftLock = Path()
-          ..moveTo(w * 0.25, h * 0.35)
-          ..quadraticBezierTo(w * 0.18, h * 0.65, w * 0.22, h * 0.95)
-          ..quadraticBezierTo(w * 0.28, h * 0.70, w * 0.32, h * 0.45)
-          ..close();
-        final rightLock = Path()
-          ..moveTo(w * 0.75, h * 0.35)
-          ..quadraticBezierTo(w * 0.82, h * 0.65, w * 0.78, h * 0.95)
-          ..quadraticBezierTo(w * 0.72, h * 0.70, w * 0.68, h * 0.45)
-          ..close();
-        canvas.drawPath(leftLock, fillPaint);
-        canvas.drawPath(rightLock, fillPaint);
-        break;
-
-      case HairStyle.long:
-        // 長髮：飄逸垂至腰間大波浪輪廓
-        final leftLong = Path()
-          ..moveTo(w * 0.24, h * 0.30)
-          ..cubicTo(w * 0.12, h * 0.60, w * 0.15, h * 0.85, w * 0.20, h * 1.0)
-          ..cubicTo(w * 0.26, h * 0.85, w * 0.28, h * 0.60, w * 0.32, h * 0.40)
-          ..close();
-        final rightLong = Path()
-          ..moveTo(w * 0.76, h * 0.30)
-          ..cubicTo(w * 0.88, h * 0.60, w * 0.85, h * 0.85, w * 0.80, h * 1.0)
-          ..cubicTo(w * 0.74, h * 0.85, w * 0.72, h * 0.60, w * 0.68, h * 0.40)
-          ..close();
-        canvas.drawPath(leftLong, fillPaint);
-        canvas.drawPath(rightLong, fillPaint);
-        break;
-
-      case HairStyle.bun:
-        // 包子頭：左右雙丸子帶精緻髮簪結
-        final leftBun = Rect.fromCenter(center: Offset(w * 0.18, h * 0.25), width: w * 0.20, height: h * 0.28);
-        final rightBun = Rect.fromCenter(center: Offset(w * 0.82, h * 0.25), width: w * 0.20, height: h * 0.28);
-        canvas.drawOval(leftBun, fillPaint);
-        canvas.drawOval(rightBun, fillPaint);
-        canvas.drawArc(leftBun, 3.8, 1.8, false, highlightPaint);
-        canvas.drawArc(rightBun, 3.8, 1.8, false, highlightPaint);
-        break;
-
-      case HairStyle.ponytail:
-        // 馬尾：後腦高昂蓬鬆束髮
-        final tail = Path()
-          ..moveTo(w * 0.65, h * 0.28)
-          ..cubicTo(w * 0.90, h * 0.20, w * 0.95, h * 0.55, w * 0.80, h * 0.88)
-          ..cubicTo(w * 0.75, h * 0.65, w * 0.72, h * 0.45, w * 0.62, h * 0.36)
-          ..close();
-        canvas.drawPath(tail, fillPaint);
-        canvas.drawPath(tail, highlightPaint);
-        // 髮圈點綴
-        canvas.drawCircle(Offset(w * 0.65, h * 0.30), 4.0, Paint()..color = const Color(0xFFC99742));
-        break;
-
-      case HairStyle.curly:
-        // 捲髮：層次感微捲空氣劉海與兩側捲髮
-        final leftCurl = Path()
-          ..moveTo(w * 0.22, h * 0.35)
-          ..quadraticBezierTo(w * 0.12, h * 0.55, w * 0.22, h * 0.72)
-          ..quadraticBezierTo(w * 0.14, h * 0.85, w * 0.24, h * 0.96)
-          ..quadraticBezierTo(w * 0.28, h * 0.70, w * 0.30, h * 0.45)
-          ..close();
-        final rightCurl = Path()
-          ..moveTo(w * 0.78, h * 0.35)
-          ..quadraticBezierTo(w * 0.88, h * 0.55, w * 0.78, h * 0.72)
-          ..quadraticBezierTo(w * 0.86, h * 0.85, w * 0.76, h * 0.96)
-          ..quadraticBezierTo(w * 0.72, h * 0.70, w * 0.70, h * 0.45)
-          ..close();
-        canvas.drawPath(leftCurl, fillPaint);
-        canvas.drawPath(rightCurl, fillPaint);
-        break;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _HairStyleAccentPainter old) =>
-      old.style != style || old.color != color;
-}
 
 // ── 配件繪製器 (全身立繪比例金屬飾品 - 精準校對五官) ───────────────────
 

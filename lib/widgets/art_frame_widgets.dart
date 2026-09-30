@@ -173,75 +173,36 @@ class _OrnateFramePainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final rect = Rect.fromLTWH(0, 0, w, h);
-    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(12));
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(14));
 
-    // 金屬雙層外框外陰影
+    // 輕柔現代微陰影
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.35)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 8);
+      ..color = Colors.black.withOpacity(0.20)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 6);
     canvas.drawRRect(rrect, shadowPaint);
 
-    // 寬金屬邊框漸層
-    final outerFramePaint = Paint()
+    // 高級纖細香檳金邊框 (Clean Luxury Border)
+    final framePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 5.5
+      ..strokeWidth = 1.8
       ..shader = const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
+          Color(0xFFFFDF85),
+          Color(0xFFC99742),
+          Color(0xFF8B6428),
           Color(0xFFEED195),
-          Color(0xFF9E7127),
-          Color(0xFF5A3E16),
-          Color(0xFFD4AF37),
-          Color(0xFF8B6B3E),
         ],
-        stops: [0.0, 0.25, 0.5, 0.75, 1.0],
       ).createShader(rect);
-    canvas.drawRRect(rrect, outerFramePaint);
+    canvas.drawRRect(rrect, framePaint);
 
-    // 內層細金邊
-    final innerRRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(4, 4, w - 8, h - 8),
-      const Radius.circular(8),
-    );
-    final innerBorderPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..color = const Color(0xFFEED195).withOpacity(0.65);
-    canvas.drawRRect(innerRRect, innerBorderPaint);
-
-    // 四角巴洛克古典花紋飾角 (Corner Filigrees)
-    _paintCorner(canvas, 6, 6, 0);                 // 左上
-    _paintCorner(canvas, w - 6, 6, 1);             // 右上
-    _paintCorner(canvas, w - 6, h - 6, 2);         // 右下
-    _paintCorner(canvas, 6, h - 6, 3);             // 左下
-  }
-
-  void _paintCorner(Canvas canvas, double x, double y, int quadrant) {
-    canvas.save();
-    canvas.translate(x, y);
-    if (quadrant == 1) canvas.scale(-1, 1);
-    if (quadrant == 2) canvas.scale(-1, -1);
-    if (quadrant == 3) canvas.scale(1, -1);
-
-    final p = Paint()
-      ..color = const Color(0xFFFFDF85)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path()
-      ..moveTo(0, 14)
-      ..quadraticBezierTo(2, 6, 6, 2)
-      ..lineTo(14, 0);
-    canvas.drawPath(path, p);
-
-    final leafP = Paint()
-      ..color = const Color(0xFFC99742)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(const Offset(4, 4), 2.2, leafP);
-
-    canvas.restore();
+    // 四角極簡精緻小菱形亮點點綴
+    final dotPaint = Paint()..color = const Color(0xFFFFE082).withOpacity(0.85);
+    canvas.drawCircle(const Offset(7, 7), 1.8, dotPaint);
+    canvas.drawCircle(Offset(w - 7, 7), 1.8, dotPaint);
+    canvas.drawCircle(Offset(7, h - 7), 1.8, dotPaint);
+    canvas.drawCircle(Offset(w - 7, h - 7), 1.8, dotPaint);
   }
 
   @override
