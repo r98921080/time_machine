@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/shop_item.dart';
 import '../../models/character.dart';
+import '../../models/user_profile.dart';
 import '../../providers/app_provider.dart';
 import '../../widgets/doll_character.dart';
 import '../../widgets/art_frame_widgets.dart';
