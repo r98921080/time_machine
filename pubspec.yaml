@@ -1,7 +1,7 @@
 name: time_machine
 description: 時光機 — 生活目標與健康管理，融合角色養成。
 publish_to: 'none'
-version: 1.5.0+6
+version: 2.0.0+7
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
