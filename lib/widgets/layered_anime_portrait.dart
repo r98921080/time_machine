@@ -93,7 +93,9 @@ class _LayeredAnimePortraitWidgetState extends State<LayeredAnimePortraitWidget>
   /// 根據性別、服裝決定主全身立繪基底（性別絕對鎖定，不受衣服變動而跳轉）
   String _resolveFullbodyAsset() {
     final outfitId = widget.appearance.outfitId;
-    final isFemale = widget.gender == '她' || widget.gender == '女';
+    // 優先順序：appearance.gender -> widget.gender
+    final effectiveGender = widget.appearance.gender ?? widget.gender;
+    final isFemale = effectiveGender == '她' || effectiveGender == '女';
 
     if (isFemale) {
       // 女性立繪基底
@@ -124,35 +126,35 @@ class _LayeredAnimePortraitWidgetState extends State<LayeredAnimePortraitWidget>
     }
   }
 
-  /// 膚色濾鏡顏色與透明度
+  /// 膚色微調（保持立繪原生白皙乾淨質感，不使用汙染五官的全幅濾鏡）
   Color _resolveSkinTint(SkinTone tone) {
     switch (tone) {
       case SkinTone.light:
-        return const Color(0xFFFFF6ED).withOpacity(0.18); // 柔白粉嫩
+        return const Color(0xFFFFF7F0).withOpacity(0.08); // 輕柔粉嫩微光
       case SkinTone.medium:
-        return Colors.transparent; // 原生中等膚色
+        return Colors.transparent; // 原生立繪膚色
       case SkinTone.tan:
-        return const Color(0xFFB8783C).withOpacity(0.32); // 健康陽光小麥色
+        return const Color(0xFF9E6534).withOpacity(0.12); // 健康陽光微小麥
       case SkinTone.dark:
-        return const Color(0xFF5E361A).withOpacity(0.45); // 深沉古銅膚色
+        return const Color(0xFF5A381F).withOpacity(0.18); // 古銅微調
     }
   }
 
-  /// 鮮明立體的髮色疊色渲染
+  /// 秀髮頂部天使光環與微光髮色（只限定於頭頂上方，絕不向下溢染臉龐）
   Color? _resolveHairColorOverlay(HairColor color) {
     switch (color) {
       case HairColor.black:
-        return const Color(0xFF151515).withOpacity(0.55);
+        return const Color(0xFF202020);
       case HairColor.brown:
-        return const Color(0xFF6B3A18).withOpacity(0.45);
+        return const Color(0xFF784520);
       case HairColor.blonde:
-        return const Color(0xFFFFCC00).withOpacity(0.50);
+        return const Color(0xFFFFD54F);
       case HairColor.red:
-        return const Color(0xFFDC2626).withOpacity(0.48);
+        return const Color(0xFFE53935);
       case HairColor.gray:
-        return const Color(0xFFCBD5E1).withOpacity(0.55);
+        return const Color(0xFFCFD8DC);
       case HairColor.fantasy:
-        return const Color(0xFF8B5CF6).withOpacity(0.52);
+        return const Color(0xFF9C27B0);
     }
   }
 
@@ -232,57 +234,56 @@ class _LayeredAnimePortraitWidgetState extends State<LayeredAnimePortraitWidget>
                       filterQuality: FilterQuality.high,
                     ),
 
-                    // 3. 膚色即時渲染層 (動態色溫調配)
+                    // 3. 膚色即時渲染層 (輕柔覆蓋，避免破壞五官立體感)
                     if (skinTint != Colors.transparent)
                       Positioned.fill(
                         child: IgnorePointer(
                           child: Container(
                             decoration: BoxDecoration(
                               color: skinTint,
-                              backgroundBlendMode: BlendMode.colorBurn,
+                              backgroundBlendMode: BlendMode.softLight,
                             ),
                           ),
                         ),
                       ),
 
-                    // 4. 自然光影髮色滲透與秀髮高光層 (Natural Anime Hair Luster & Tint)
-                    // 以柔和徑向調色與立繪自帶髮流自然融合，徹底消除生硬突兀與獵奇幾何感
+                    // 4. 自然光影髮色秀髮頂部光澤 (Angel Ring Highlight - 僅限頭頂髮際線，絕不溢染臉部)
                     if (hairOverlay != null)
                       Positioned(
-                        top: widget.height * 0.045,
-                        left: widget.width * 0.28,
-                        width: widget.width * 0.44,
-                        height: widget.height * 0.16,
+                        top: widget.height * 0.040,
+                        left: widget.width * 0.32,
+                        width: widget.width * 0.36,
+                        height: widget.height * 0.055,
                         child: IgnorePointer(
                           child: Stack(
                             alignment: Alignment.center,
                             children: [
-                              // 柔和髮色氛圍光
+                              // 秀髮頂部柔和光環（微光彩）
                               Container(
                                 decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
+                                  borderRadius: BorderRadius.circular(16),
                                   gradient: RadialGradient(
                                     colors: [
-                                      hairOverlay.withOpacity(0.55),
-                                      hairOverlay.withOpacity(0.25),
+                                      hairOverlay.withOpacity(0.40),
+                                      hairOverlay.withOpacity(0.12),
                                       Colors.transparent,
                                     ],
-                                    stops: const [0.0, 0.60, 1.0],
+                                    stops: const [0.0, 0.55, 1.0],
                                   ),
                                 ),
                               ),
                               // 日漫天使光環微光（秀髮高光 Angel Ring Highlight）
                               Positioned(
-                                top: widget.height * 0.04,
+                                top: widget.height * 0.022,
                                 child: Container(
-                                  width: widget.width * 0.26,
-                                  height: 2.5,
+                                  width: widget.width * 0.24,
+                                  height: 2.2,
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(2),
                                     gradient: LinearGradient(
                                       colors: [
                                         Colors.transparent,
-                                        Colors.white.withOpacity(0.40),
+                                        Colors.white.withOpacity(0.55),
                                         Colors.transparent,
                                       ],
                                     ),

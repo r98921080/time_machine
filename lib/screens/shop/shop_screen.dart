@@ -384,9 +384,10 @@ class _ShopScreenState extends State<ShopScreen>
                         ),
                         DollCharacterWidget(
                           appearance: character,
-                          gender: provider.profile?.characterMode == CharacterMode.mirror
-                              ? (provider.profile?.mirrorGender ?? '她')
-                              : (provider.profile?.sex ?? '男'),
+                          gender: character.gender ??
+                              (provider.profile?.characterMode == CharacterMode.mirror
+                                  ? (provider.profile?.mirrorGender ?? '她')
+                                  : (provider.profile?.mirrorGender ?? provider.profile?.sex ?? '她')),
                           isMirror: provider.profile?.characterMode == CharacterMode.mirror,
                           width: 95,
                           height: 145,
@@ -522,13 +523,58 @@ class _ShopScreenState extends State<ShopScreen>
     }
   }
 
+  IconData _resolveCategoryIcon(ShopItem item) {
+    final id = item.id.toLowerCase();
+    if (id.contains('crown') || id.contains('tiara')) return Icons.military_tech_rounded;
+    if (id.contains('glass') || id.contains('monocle')) return Icons.visibility_outlined;
+    if (id.contains('ribbon') || id.contains('bow')) return Icons.loyalty_outlined;
+    if (id.contains('earring') || id.contains('star')) return Icons.auto_awesome;
+    if (id.contains('wings')) return Icons.flutter_dash_outlined;
+    if (id.contains('whisker') || id.contains('cat')) return Icons.pets;
+    if (id.contains('pajamas') || id.contains('sleep')) return Icons.nightlight_round;
+    if (id.contains('suit') || id.contains('formal')) return Icons.business_center_outlined;
+    if (id.contains('dress') || id.contains('princess')) return Icons.dry_cleaning_outlined;
+    if (id.contains('sport') || id.contains('tracksuit')) return Icons.directions_run_rounded;
+    if (id.contains('kimono') || id.contains('hanfu')) return Icons.style_outlined;
+    if (id.contains('sword') || id.contains('knight')) return Icons.shield_outlined;
+    if (id.contains('magic') || id.contains('mage')) return Icons.auto_fix_high;
+    if (id.contains('space')) return Icons.rocket_launch_outlined;
+
+    switch (item.category) {
+      case ShopCategory.outfit:
+        return Icons.checkroom_rounded;
+      case ShopCategory.hairstyle:
+        return Icons.face_retouching_natural;
+      case ShopCategory.accessory:
+        return Icons.diamond_outlined;
+      case ShopCategory.background:
+        return Icons.wallpaper_rounded;
+      case ShopCategory.furniture:
+        return Icons.chair_outlined;
+      case ShopCategory.tattoo:
+        return Icons.brush_outlined;
+      case ShopCategory.faceDecal:
+        return Icons.mood_outlined;
+      case ShopCategory.special:
+        return Icons.stars_rounded;
+    }
+  }
+
   Future<void> _buy(BuildContext context, AppProvider provider, ShopItem item) async {
+    final iconData = _resolveCategoryIcon(item);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: Row(children: [
-          Text(item.emoji, style: const TextStyle(fontSize: 28)),
-          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFFC99742).withOpacity(0.15),
+            ),
+            child: Icon(iconData, size: 24, color: const Color(0xFFC99742)),
+          ),
+          const SizedBox(width: 10),
           Expanded(child: Text(item.name)),
         ]),
         content: Column(
@@ -564,8 +610,8 @@ class _ShopScreenState extends State<ShopScreen>
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('🎉 購買並裝備 ${item.emoji} ${item.name}！'),
-                backgroundColor: Colors.green,
+                content: Text('已購買並裝備「${item.name}」！'),
+                backgroundColor: const Color(0xFF2B4D58),
               ),
             );
           }
@@ -579,6 +625,43 @@ class _ShopScreenState extends State<ShopScreen>
         }
       }
     }
+  }
+}
+
+IconData _resolveCategoryIcon(ShopItem item) {
+  final id = item.id.toLowerCase();
+  if (id.contains('crown') || id.contains('tiara')) return Icons.military_tech_rounded;
+  if (id.contains('glass') || id.contains('monocle')) return Icons.visibility_outlined;
+  if (id.contains('ribbon') || id.contains('bow')) return Icons.loyalty_outlined;
+  if (id.contains('earring') || id.contains('star')) return Icons.auto_awesome;
+  if (id.contains('wings')) return Icons.flutter_dash_outlined;
+  if (id.contains('whisker') || id.contains('cat')) return Icons.pets;
+  if (id.contains('pajamas') || id.contains('sleep')) return Icons.nightlight_round;
+  if (id.contains('suit') || id.contains('formal')) return Icons.business_center_outlined;
+  if (id.contains('dress') || id.contains('princess')) return Icons.dry_cleaning_outlined;
+  if (id.contains('sport') || id.contains('tracksuit')) return Icons.directions_run_rounded;
+  if (id.contains('kimono') || id.contains('hanfu')) return Icons.style_outlined;
+  if (id.contains('sword') || id.contains('knight')) return Icons.shield_outlined;
+  if (id.contains('magic') || id.contains('mage')) return Icons.auto_fix_high;
+  if (id.contains('space')) return Icons.rocket_launch_outlined;
+
+  switch (item.category) {
+    case ShopCategory.outfit:
+      return Icons.checkroom_rounded;
+    case ShopCategory.hairstyle:
+      return Icons.face_retouching_natural;
+    case ShopCategory.accessory:
+      return Icons.diamond_outlined;
+    case ShopCategory.background:
+      return Icons.wallpaper_rounded;
+    case ShopCategory.furniture:
+      return Icons.chair_outlined;
+    case ShopCategory.tattoo:
+      return Icons.brush_outlined;
+    case ShopCategory.faceDecal:
+      return Icons.mood_outlined;
+    case ShopCategory.special:
+      return Icons.stars_rounded;
   }
 }
 
@@ -685,20 +768,33 @@ class _ShopCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // Item Icon with 3D drop shadow
+                    // Item Icon with Luxury Crest Badging
                     Transform.translate(
                       offset: const Offset(0, -6),
-                      child: Text(
-                        item.emoji,
-                        style: TextStyle(
-                          fontSize: 54,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withOpacity(0.20),
-                              offset: const Offset(0, 8),
-                              blurRadius: 12,
+                      child: Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isDark ? const Color(0xFF1E323B) : Colors.white,
+                          border: Border.all(
+                            color: rarityColor.withOpacity(0.55),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: rarityColor.withOpacity(0.28),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
                             ),
                           ],
+                        ),
+                        child: Center(
+                          child: Icon(
+                            _resolveCategoryIcon(item),
+                            size: 32,
+                            color: rarityColor,
+                          ),
                         ),
                       ),
                     ),

@@ -277,7 +277,7 @@ class _CharacterScreenState extends State<CharacterScreen>
                           ),
                           child: DollCharacterWidget(
                             appearance: character,
-                            gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
+                            gender: character.gender ?? (isMirror ? (profile.mirrorGender ?? '她') : (profile.mirrorGender ?? profile.sex)),
                             isMirror: isMirror,
                             width: _chatExpanded ? 120 : 210,
                             height: _chatExpanded ? 170 : 325,
@@ -475,15 +475,23 @@ class _RelationshipBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const icons = {
-      '陌生人': '👤', '普通朋友': '😊', '熟悉': '🙂',
-      '好友': '😄', '曖昧': '💗', '親密': '❤️'
-    };
-    final ico = icons[relationship] ?? '✨';
+    IconData getRelationshipIcon(String rel) {
+      switch (rel) {
+        case '陌生人': return Icons.person_outline;
+        case '普通朋友': return Icons.sentiment_satisfied_outlined;
+        case '熟悉': return Icons.handshake_outlined;
+        case '好友': return Icons.star_border_rounded;
+        case '曖昧': return Icons.favorite_border_rounded;
+        case '親密': return Icons.favorite_rounded;
+        default: return Icons.auto_awesome;
+      }
+    }
+
     return OrnatePlaqueBadge(
-      label: '$ico $relationship',
-      fontSize: 10.5,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+      label: relationship,
+      icon: getRelationshipIcon(relationship),
+      fontSize: 11,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
     );
   }
 }
@@ -507,7 +515,6 @@ class _ExpProgressBar extends StatelessWidget {
             ? 1.0
             : (exp - current) / (next - current);
     final rel = profile.relationshipLevel;
-    final barColor = const Color(0xFFC99742);
 
     return Container(
       color: theme.colorScheme.surface,
@@ -545,22 +552,51 @@ class _EmptyChatPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hints = {
-      '陌生人': '說聲「你好」，開始認識$characterName吧！',
-      '朋友': '和$characterName聊聊今天過得怎麼樣',
-      '曖昧': '傳個訊息給$characterName，看$characterName怎麼說',
-      '親密': '$characterName在等你說話呢',
+      '陌生人': '向 $characterName 打聲招呼，開啟彼此的冒險羈絆吧！',
+      '普通朋友': '和 $characterName 分享今天的生活與心事',
+      '熟悉': '告訴 $characterName 今天的微小成就，一起前進',
+      '好友': '和 $characterName 暢聊夢想與目標',
+      '曖昧': '傳個訊息給 $characterName，感受專屬於你們的悸動',
+      '親密': '$characterName 正在默默守候著你，隨時都能傾聽',
     };
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('💬', style: TextStyle(fontSize: 40)),
-          const SizedBox(height: 12),
-          Text(
-            hints[relationship] ?? '開始對話吧',
-            style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant),
-            textAlign: TextAlign.center,
+          Container(
+            width: 68,
+            height: 68,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFFC99742).withOpacity(0.10),
+              border: Border.all(
+                color: const Color(0xFFC99742).withOpacity(0.35),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFC99742).withOpacity(0.12),
+                  blurRadius: 16,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.forum_outlined,
+              size: 32,
+              color: Color(0xFFC99742),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              hints[relationship] ?? '開啟與伴侶的專屬對話吧',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  letterSpacing: 0.2),
+              textAlign: TextAlign.center,
+            ),
           ),
         ],
       ),
@@ -761,8 +797,17 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
             ),
             child: Row(
               children: [
-                const Text('🛍️', style: TextStyle(fontSize: 24)),
-                const SizedBox(width: 10),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFC99742).withOpacity(0.20),
+                    border: Border.all(color: const Color(0xFFC99742).withOpacity(0.50)),
+                  ),
+                  child: const Icon(Icons.checkroom_rounded, color: Color(0xFFC99742), size: 22),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -811,16 +856,19 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
                       child: Text('女性伴侶 ♀', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  selected: (widget.provider.profile?.mirrorGender ?? '她') == '她',
-                  onSelected: (selected) {
+                  selected: (_appearance.gender ?? widget.provider.profile?.mirrorGender ?? '她') == '她' ||
+                      (_appearance.gender ?? widget.provider.profile?.mirrorGender ?? '她') == '女',
+                  onSelected: (selected) async {
                     if (selected) {
+                      final updated = _appearance.copyWith(gender: '她');
                       setState(() {
-                        _appearance = _appearance.copyWith(gender: '她');
+                        _appearance = updated;
                       });
                       final p = widget.provider.profile;
                       if (p != null) {
-                        widget.provider.updateProfile(p.copyWith(mirrorGender: '她'));
+                        await widget.provider.updateProfile(p.copyWith(mirrorGender: '她'));
                       }
+                      await widget.provider.updateCharacterAppearance(updated);
                     }
                   },
                 ),
@@ -834,17 +882,19 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
                       child: Text('男性伴侶 ♂', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  selected: (widget.provider.profile?.mirrorGender ?? '她') == '他' ||
-                      (widget.provider.profile?.mirrorGender ?? '她') == '男',
-                  onSelected: (selected) {
+                  selected: (_appearance.gender ?? widget.provider.profile?.mirrorGender ?? '她') == '他' ||
+                      (_appearance.gender ?? widget.provider.profile?.mirrorGender ?? '她') == '男',
+                  onSelected: (selected) async {
                     if (selected) {
+                      final updated = _appearance.copyWith(gender: '他');
                       setState(() {
-                        _appearance = _appearance.copyWith(gender: '他');
+                        _appearance = updated;
                       });
                       final p = widget.provider.profile;
                       if (p != null) {
-                        widget.provider.updateProfile(p.copyWith(mirrorGender: '他'));
+                        await widget.provider.updateProfile(p.copyWith(mirrorGender: '他'));
                       }
+                      await widget.provider.updateCharacterAppearance(updated);
                     }
                   },
                 ),

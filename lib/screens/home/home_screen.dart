@@ -508,7 +508,7 @@ class _CompanionHeroCardState extends State<_CompanionHeroCard> {
                   ),
                   DollCharacterWidget(
                     appearance: character,
-                    gender: isMirror ? (profile.mirrorGender ?? '她') : profile.sex,
+                    gender: character.gender ?? (isMirror ? (profile.mirrorGender ?? '她') : (profile.mirrorGender ?? profile.sex)),
                     isMirror: isMirror,
                     width: 95,
                     height: 145,
